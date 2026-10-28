@@ -1,0 +1,177 @@
+diff --git a/src/detail/auv2/wrappedview.asinclude.mm b/src/detail/auv2/wrappedview.asinclude.mm
+index 0de2b3c..65a2d46 100644
+--- a/src/detail/auv2/wrappedview.asinclude.mm
++++ b/src/detail/auv2/wrappedview.asinclude.mm
+@@ -15,6 +15,15 @@
+ 
+ #include "auv2_shared.h"
+ #include <detail/os/osutil.h>
++#include <os/log.h>
++
++// The view often runs in Apple's AU hosting service (Logic hosts AUv2s out of process),
++// where stderr goes nowhere: size changes are logged to the unified log.
++static os_log_t clapWrapperAUv2ViewLog()
++{
++  static os_log_t log = os_log_create("org.clap-wrapper.auv2", "view");
++  return log;
++}
+ 
+ //#define CLAP_WRAPPER_UI_CLASSNAME_NSVIEW CLAP_WRAPPER_COCOA_CLASS_NSVIEW
+ //#define CLAP_WRAPPER_UI_CLASSNAME_COCOAUI CLAP_WRAPPER_COCOA_CLASS
+@@ -32,7 +41,7 @@
+ - (id)initWithAUv2:(free_audio::auv2_wrapper::ui_connection *)cont preferredSize:(NSSize)size;
+ - (void)doIdle;
+ - (void)dealloc;
+-- (void)setFrame:(NSRect)newSize;
++- (void)setFrameSize:(NSSize)newSize;
+ 
+ @end
+ 
+@@ -209,19 +218,23 @@ void CLAP_WRAPPER_TIMER_CALLBACK(CFRunLoopTimerRef timer, void *info)
+   }
+   [super dealloc];
+ }
+-- (void)setFrame:(NSRect)newSize
++// Every size change reaches the plugin: -setFrame: goes through here, and so do Auto
++// Layout and the AU hosting service, which size the view with constraints and never
++// call -setFrame:.
++- (void)setFrameSize:(NSSize)newSize
+ {
+-  [super setFrame:newSize];
++  [super setFrameSize:newSize];
+   const auto mainThreadMutex = ui._mainThreadMutex;
+   const ausdk::AUEntryGuard mainThreadGuard(mainThreadMutex.get());
++  os_log(clapWrapperAUv2ViewLog(), "setFrameSize %.0fx%.0f (GUI %{public}s)", newSize.width, newSize.height,
++         canary ? "live" : "not yet");
+   if (canary)
+   {
+     auto gui = ui._plugin->_ext._gui;
+     // gui->set_scale is intentionally not called because
+     // AUv2 gui always uses logical size
+-    gui->set_size(ui._plugin->_plugin, newSize.size.width, newSize.size.height);
++    gui->set_size(ui._plugin->_plugin, newSize.width, newSize.height);
+   }
+-  // gui->show(ui._plugin->_plugin);
+ }
+ 
+ @end
+diff --git a/src/detail/auv3/auv3_audiounit.h b/src/detail/auv3/auv3_audiounit.h
+index 9a790d2..aa6a18d 100644
+--- a/src/detail/auv3/auv3_audiounit.h
++++ b/src/detail/auv3/auv3_audiounit.h
+@@ -78,6 +78,9 @@
+ // Called by the view controller when the host resizes the view.
+ - (BOOL)setGUISize:(uint32_t)width height:(uint32_t)height;
+ 
++// The smallest and largest size the GUI takes (its own size when it cannot resize).
++- (void)guiLimitsMin:(CGSize *)outMin max:(CGSize *)outMax;
++
+ // Called by the view controller to establish the back-reference needed
+ // for gui_request_resize to set preferredContentSize on the VC.
+ - (void)setViewController:(ClapAUv3ViewController *)vc;
+diff --git a/src/detail/auv3/auv3_audiounit.mm b/src/detail/auv3/auv3_audiounit.mm
+index 5fd8905..24714c1 100644
+--- a/src/detail/auv3/auv3_audiounit.mm
++++ b/src/detail/auv3/auv3_audiounit.mm
+@@ -2243,6 +2243,53 @@ static const char *const _windowApi = CLAP_WINDOW_API_COCOA;
+   _impl->_viewController = nil;
+ }
+ 
++// The smallest and largest size the plugin's GUI takes, through adjust_size. Equal to
++// the current size for a GUI that cannot resize.
++- (void)guiLimitsMin:(CGSize *)outMin max:(CGSize *)outMax
++{
++  uint32_t w = _impl ? _impl->_guiWidth : 0, h = _impl ? _impl->_guiHeight : 0;
++  CGSize cur = CGSizeMake(w, h), lo = cur, hi = cur;
++  if ([self canResizeGUI])
++  {
++    auto mainGuard = _impl->_plugin->AlwaysMainThread();
++    auto *gui = _impl->_plugin->_ext._gui;
++    uint32_t minW = 1, minH = 1, maxW = 16384, maxH = 16384;
++    if (gui->adjust_size)
++    {
++      gui->adjust_size(_impl->_plugin->_plugin, &minW, &minH);
++      gui->adjust_size(_impl->_plugin->_plugin, &maxW, &maxH);
++    }
++    lo = CGSizeMake(minW, minH);
++    hi = CGSizeMake(maxW, maxH);
++  }
++  if (outMin) *outMin = lo;
++  if (outMax) *outMax = hi;
++}
++
++// Hosts ask which of their view configurations (sizes, 0 = any) the audio unit can
++// take. A resizable GUI takes any size within its limits; a fixed one only its own.
++- (NSIndexSet *)supportedViewConfigurations:(NSArray<AUAudioUnitViewConfiguration *> *)configurations
++{
++  CGSize lo, hi;
++  [self guiLimitsMin:&lo max:&hi];
++  NSMutableIndexSet *result = [NSMutableIndexSet indexSet];
++  [configurations enumerateObjectsUsingBlock:^(AUAudioUnitViewConfiguration *c, NSUInteger i, BOOL *) {
++    BOOL w = c.width == 0 || (c.width >= lo.width && c.width <= hi.width);
++    BOOL h = c.height == 0 || (c.height >= lo.height && c.height <= hi.height);
++    if (w && h && (!(lo.width < hi.width || lo.height < hi.height) || (c.width == 0 && c.height == 0))) [result addIndex:i];
++  }];
++  AUV3LOG("supportedViewConfigurations: %lu offered, %lu supported", (unsigned long)configurations.count,
++          (unsigned long)result.count);
++  return result;
++}
++
++- (void)selectViewConfiguration:(AUAudioUnitViewConfiguration *)configuration
++{
++  AUV3LOG("selectViewConfiguration: %.0fx%.0f", configuration.width, configuration.height);
++  if (configuration.width > 0 && configuration.height > 0 && [self canResizeGUI])
++    [self _applyGUISizeWidth:(uint32_t)configuration.width height:(uint32_t)configuration.height];
++}
++
+ - (BOOL)canResizeGUI
+ {
+   if (!_impl || !_impl->_plugin || !_impl->_plugin->_ext._gui) return NO;
+@@ -2670,6 +2717,26 @@ static BOOL clapAUv3FourCC(id value, OSType *outCode)
+   [self didChangeValueForKey:@"preferredContentSize"];
+ }
+ 
++#if TARGET_OS_OSX
++// Read by the view service (and so by the host) as the range the view may be
++// resized in. AppKit's defaults are "small" and "large"; a fixed GUI says its size.
++- (NSSize)preferredMinimumSize
++{
++  CGSize lo = _sizeKnown ? _pluginSize : kClapAUv3PlaceholderSize, hi = lo;
++  if (self.audioUnit) [self.audioUnit guiLimitsMin:&lo max:&hi];
++  AUV3LOG("preferredMinimumSize -> %.0fx%.0f", lo.width, lo.height);
++  return lo;
++}
++
++- (NSSize)preferredMaximumSize
++{
++  CGSize lo = _sizeKnown ? _pluginSize : kClapAUv3PlaceholderSize, hi = lo;
++  if (self.audioUnit) [self.audioUnit guiLimitsMin:&lo max:&hi];
++  AUV3LOG("preferredMaximumSize -> %.0fx%.0f", hi.width, hi.height);
++  return hi;
++}
++#endif
++
+ - (CGSize)preferredContentSize
+ {
+   // Some hosts read the size before they ever touch .view — our own AUv3
+@@ -2772,10 +2839,19 @@ static BOOL clapAUv3FourCC(id value, OSType *outCode)
+   CGRect bounds = self.view.bounds;
+   if (bounds.size.width > 0 && bounds.size.height > 0)
+   {
++    AUV3LOG("viewDidLayout: bounds %.0fx%.0f, published %.0fx%.0f", bounds.size.width, bounds.size.height,
++            _pluginSize.width, _pluginSize.height);
+     // Propagate host-initiated container resize to the CLAP plugin
+     if ([self.audioUnit canResizeGUI])
+     {
+-      [self.audioUnit setGUISize:(uint32_t)bounds.size.width height:(uint32_t)bounds.size.height];
++      if ([self.audioUnit setGUISize:(uint32_t)bounds.size.width height:(uint32_t)bounds.size.height])
++      {
++        // The host gave the view a new size: that is the plugin's size now. Kept
++        // without a KVO notification, which the host would take for a new request.
++        uint32_t w = 0, h = 0;
++        if ([self.audioUnit prepareGUIAndReturnWidth:&w height:&h] && w > 0 && h > 0)
++          _pluginSize = CGSizeMake(w, h);
++      }
+     }
+ 
+     // adjust_size may have snapped the container bounds (fixed aspect ratio,

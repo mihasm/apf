@@ -1,0 +1,30 @@
+[package]
+name = "example-05-modulation"
+description = "Example 05: LFO, mod wheel and pitch bend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+# staticlib: linked into every plugin format by the wrapper build; rlib: for the tests.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+apf.workspace = true
+
+[dev-dependencies]
+apf-test.workspace = true
+
+# Read by `cargo xtask bundle`: how the plugin is packaged.
+[package.metadata.apf]
+name = "APF Example 05 Modulation"
+bundle-id = "dev.miha.apf.example.modulation"
+# Audio Unit identity. Type: aumu = instrument, aufx = effect, aumf = effect with MIDI.
+au-type = "aumu"
+# Four characters with at least one capital. The AUv3 gets the first three plus "3".
+au-subtype = "ExMo"
+au-manufacturer = "MiSm"
+au-manufacturer-name = "Miha Smrekar"

@@ -1,0 +1,11 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.example.synth",
+  "name": "Sweep Lead",
+  "type": "Lead",
+  "subtype": "Synth",
+  "mood": ["Bright", "Moving"],
+  "description": "Saw lead whose filter sweeps with the LFO; bend range 12 semitones",
+  "author": "APF",
+  "params": { "cutoff": 1200, "resonance": 55, "wave": "Saw", "attack": 8, "decay": 400, "sustain": 75, "release": 250, "lfo_rate": 2.5, "lfo_depth": 45, "bend_range": 12, "gain": -11 }
+}

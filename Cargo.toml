@@ -1,0 +1,53 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/apf",
+    "crates/apf-webview",
+    "crates/apf-host",
+    "crates/apf-test",
+    "examples/01-sine",
+    "examples/02-gain",
+    "examples/03-params",
+    "examples/04-envelope",
+    "examples/05-modulation",
+    "examples/06-filter",
+    "examples/07-gui",
+    "examples/08-presets-and-state",
+    "examples/09-midi-and-learn",
+    "examples/10-synth",
+    "examples/demo-synth",
+    "examples/tuning-demo",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Miha Smrekar"]
+rust-version = "1.85"
+repository = "https://github.com/mihasm/apf"
+homepage = "https://github.com/mihasm/apf"
+readme = "README.md"
+keywords = ["audio", "plugin", "clap", "vst3", "synthesizer"]
+categories = ["multimedia::audio"]
+
+[workspace.dependencies]
+apf = { path = "crates/apf", version = "0.1.0" }
+apf-webview = { path = "crates/apf-webview", version = "0.1.0" }
+apf-test = { path = "crates/apf-test", version = "0.1.0" }
+clap-sys = "0.5"
+wry = "0.57"
+raw-window-handle = "0.6"
+
+[profile.release]
+# Plugins run inside someone else's process: keep unwinding so a panic is caught at the
+# ABI boundary instead of taking the host down.
+panic = "unwind"
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"
+
+[patch.crates-io]
+# MIT replacement of an MPL-2.0 transitive dependency of wry (see third_party/option-ext).
+option-ext = { path = "third_party/option-ext" }

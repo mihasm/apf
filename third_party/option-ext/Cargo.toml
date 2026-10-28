@@ -1,0 +1,9 @@
+[package]
+# A clean MIT implementation of the `option-ext` 0.2 API, patched in for the crates.io crate
+# (MPL-2.0), which reaches the plugins through wry -> dirs -> dirs-sys. Keeps every
+# dependency of a shipped plugin under a permissive licence.
+name = "option-ext"
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+publish = false

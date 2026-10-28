@@ -1,0 +1,16 @@
+[package]
+name = "apf-test"
+description = "Test an apf plugin headlessly through the CLAP ABI, with a check that process() never allocates"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+clap-sys.workspace = true

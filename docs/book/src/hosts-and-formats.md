@@ -1,0 +1,83 @@
+# Hosts and formats
+
+## How one plugin becomes five formats
+
+APF implements the CLAP interface in Rust, once (`crates/apf/src/clap.rs`). The other formats
+are produced from that CLAP by [clap-wrapper](https://github.com/free-audio/clap-wrapper) (MIT,
+C++), built by `cargo xtask bundle`:
+
+| Format | macOS | Windows |
+|---|---|---|
+| CLAP | yes | yes |
+| VST3 | yes | yes |
+| Audio Unit v2 | yes | no such format |
+| Audio Unit v3 | yes (needs Xcode) | no such format |
+| Standalone app | yes | not verified |
+| Linux (any format) | not built | not built |
+| LV2, AAX, VST2 | not offered | not offered |
+
+Your plugin never sees the format. Everything a format does differently (how it numbers
+parameters, how it saves state, how it asks for a window) is the wrapper's job, and where the
+wrappers had bugs APF carries patches (`wrapper/patches/`) and checks them with validators.
+
+## Building
+
+```sh
+cargo xtask bundle <package>                    # CLAP, VST3, AUv2, standalone → dist/release/
+cargo xtask bundle <package> --formats all      # plus AUv3 (macOS, needs Xcode)
+cargo xtask bundle <package> --install          # copy into the plugin folders
+cargo xtask validate <package>                  # build, then run every validator
+cargo xtask bundle <package> --project ../mine  # a plugin in its own workspace
+```
+
+The packaging identity lives in the plugin's `Cargo.toml`:
+
+```toml
+[package.metadata.apf]
+name = "APF Example 01 Sine"
+bundle-id = "dev.miha.apf.example.sine"
+au-type = "aumu"           # aumu instrument, aufx effect, aumf effect that takes MIDI
+au-subtype = "ExSi"        # four characters, at least one capital
+au-manufacturer = "MiSm"   # four characters, at least one capital; yours, the same for all your plugins
+au-manufacturer-name = "Miha Smrekar"
+```
+
+**These identifiers are forever.** The CLAP id, the bundle id and the Audio Unit codes are
+stored in every project a user saves. Change one after release and the host no longer finds the
+plugin. The AUv3 takes the first three characters of the subtype plus `3`, so two plugins of
+yours must not share their first three characters.
+
+## What is tested where
+
+- **macOS, Apple silicon:** CLAP, VST3, AUv2, AUv3 and the standalone app are built.
+  clap-validator, the Steinberg VST3 validator, `auval` for both Audio Units and APF's state
+  checks pass for the demo synth. Logic Pro (AUv2 and AUv3) and REAPER load it, restore its
+  sessions and show its editor.
+- **Windows 11, x64:** CLAP and VST3, the editor in WebView2, REAPER; the same validators.
+- **Not verified:** other hosts (Bitwig, Cubase, Ableton Live, FL Studio, Studio One), the
+  Windows standalone, Windows on ARM, Intel Macs, and a second monitor with another scale.
+- **Not built:** Linux, LV2, AAX, VST2.
+
+[Validation](validation.md) has the full results with versions. When you report a host problem,
+say which host, which format and which version.
+
+## Quirks worth knowing
+
+- **Pitch bend** reaches Audio Units as a channel-wide tuning expression; APF turns it back
+  into the wheel position ([Audio and MIDI](audio-and-midi.md)).
+- **Logic hands parameter values back with less precision** (32-bit floats through the Audio
+  Unit API), so a preset counts as unchanged when every parameter shows the same text, not only
+  when the numbers are equal.
+- **Logic's Audio Unit v3 windows** have no resize edge. The page's own grip covers them
+  ([The web editor](web-editor.md)).
+- **AUv2 and AUv3 side by side:** the AUv3 has its own subtype, so hosts list two entries
+  when both are installed.
+- **A VST3 shows many parameters in REAPER** (about 2100 for a plugin that takes MIDI):
+  clap-wrapper adds MIDI controller mapping parameters, because VST3 has no controller events.
+
+The rest is in [Known issues](known-issues.md).
+
+## Not offered
+
+VST2 is out (Steinberg no longer licenses it) and AAX needs Avid's SDK under a GPL or a
+separate agreement; neither is in the build ([Licences](licences.md)).

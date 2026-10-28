@@ -1,0 +1,10 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.tuning-demo",
+  "name": "Quarter-comma Meantone",
+  "params": { "gain": -12, "attack": 5, "release": 800 },
+  "controller": {
+    "name": "1/4-comma meantone, C to C#",
+    "cents": [0, -24.0, -6.8, 10.3, -13.7, 3.4, -20.5, -3.4, -27.4, -10.3, 6.8, -17.1]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.example.synth",
+  "name": "Warm Pad",
+  "type": "Pad",
+  "subtype": "Warm",
+  "mood": ["Warm", "Slow"],
+  "description": "Slow triangle pad; the mod wheel adds a gentle filter sweep",
+  "author": "APF",
+  "params": { "cutoff": 1400, "resonance": 15, "wave": "Triangle", "attack": 450, "decay": 600, "sustain": 80, "release": 1200, "lfo_rate": 0.4, "lfo_depth": 20, "bend_range": 2, "gain": -9 }
+}

@@ -1,0 +1,11 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.example.synth",
+  "name": "Soft Bass",
+  "type": "Bass",
+  "subtype": "Analog",
+  "mood": ["Dark", "Round"],
+  "description": "Round bass from a muted saw",
+  "author": "APF",
+  "params": { "cutoff": 420, "resonance": 20, "wave": "Saw", "attack": 3, "decay": 350, "sustain": 55, "release": 140, "lfo_rate": 4, "lfo_depth": 0, "bend_range": 2, "gain": -8 }
+}

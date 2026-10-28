@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APF Demo Synth</title>
+<script src="/__apf/apf.js"></script>
+<style>
+  :root {
+    --bg: #121318; --panel: #1b1d24; --line: #2a2d37; --text: #e6e7ec; --dim: #8b8fa0;
+    --accent: #5eb3ff; --accent-dim: #2b5d87;
+    --apf-bg: var(--bg); --apf-panel: var(--panel); --apf-line: var(--line); --apf-text: var(--text);
+    --apf-dim: var(--dim); --apf-accent: var(--accent); --apf-accent-dim: var(--accent-dim);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px 6px; }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+  header [data-apf-presets] { flex: 1; max-width: 360px; margin-left: auto; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 8px 20px 0; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; }
+  section.wide { grid-column: span 2; }
+  h2 { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--dim); }
+  .row { display: grid; grid-template-columns: 78px 1fr 64px 34px; align-items: center; gap: 8px; margin: 3px 0; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+  .row small { color: var(--accent); font-size: 10px; text-align: right; }
+  label { color: var(--dim); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px;
+    border-radius: 50%; background: var(--text); border: 2px solid var(--accent); }
+  .segmented { display: flex; gap: 6px; }
+  .segmented button { flex: 1; padding: 6px 0; border-radius: 7px; border: 1px solid var(--line);
+    background: transparent; color: var(--dim); font: inherit; cursor: pointer; }
+  .segmented button.on { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+  svg.wave { width: 100%; height: 30px; margin-top: 8px; }
+  svg.wave path { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; }
+  .mod { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; align-items: center; }
+  .mod .segmented { grid-column: 1; }
+  .mod .seg-label { color: var(--dim); font-size: 11px; margin-bottom: 4px; }
+  .live { display: flex; align-items: center; gap: 14px; margin-top: 9px; color: var(--dim); font-size: 11px; }
+  .live span { display: inline-flex; align-items: center; gap: 6px; }
+  .live .bar { position: relative; display: inline-block; width: 54px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .live .bar b { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--accent); }
+  .live .pedal::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--dim); }
+  .live .pedal.on { color: var(--text); }
+  .live .pedal.on::before { background: var(--accent); border-color: var(--accent); }
+  footer { padding: 7px 20px; color: var(--dim); font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>APF Demo Synth</h1>
+  <div data-apf-presets></div>
+</header>
+<main>
+  <div class="col">
+    <section>
+      <h2>Oscillator</h2>
+      <div class="segmented" id="wave" data-param-learn="wave"></div>
+      <svg class="wave" viewBox="0 0 200 34" preserveAspectRatio="none"><path id="wave-shape"></path></svg>
+    </section>
+    <section>
+      <h2>Filter</h2>
+      <div class="row"><label for="cutoff" data-param-name="cutoff"></label>
+        <input id="cutoff" type="range" data-param="cutoff"><output data-param-text="cutoff"></output><small data-param-cc="cutoff"></small></div>
+      <div class="row"><label for="resonance" data-param-name="resonance"></label>
+        <input id="resonance" type="range" data-param="resonance"><output data-param-text="resonance"></output><small data-param-cc="resonance"></small></div>
+    </section>
+  </div>
+  <div class="col">
+    <section>
+      <h2>Envelope</h2>
+      <div class="row"><label for="attack" data-param-name="attack"></label>
+        <input id="attack" type="range" data-param="attack"><output data-param-text="attack"></output><small data-param-cc="attack"></small></div>
+      <div class="row"><label for="decay" data-param-name="decay"></label>
+        <input id="decay" type="range" data-param="decay"><output data-param-text="decay"></output><small data-param-cc="decay"></small></div>
+      <div class="row"><label for="sustain" data-param-name="sustain"></label>
+        <input id="sustain" type="range" data-param="sustain"><output data-param-text="sustain"></output><small data-param-cc="sustain"></small></div>
+      <div class="row"><label for="release" data-param-name="release"></label>
+        <input id="release" type="range" data-param="release"><output data-param-text="release"></output><small data-param-cc="release"></small></div>
+    </section>
+    <section>
+      <h2>Amp</h2>
+      <div class="row"><label for="gain" data-param-name="gain"></label>
+        <input id="gain" type="range" data-param="gain"><output data-param-text="gain"></output><small data-param-cc="gain"></small></div>
+    </section>
+  </div>
+  <section class="wide">
+    <h2>Mod wheel &amp; pitch bend</h2>
+    <div class="mod">
+      <div>
+        <div class="seg-label">Mod wheel moves</div>
+        <div class="segmented" id="mod-target" data-param-learn="mod_target"></div>
+        <div class="live" title="What your controller sends now">
+          <span>Wheel <i class="bar"><b id="live-wheel"></b></i></span>
+          <span>Bend <i class="bar"><b id="live-bend"></b></i></span>
+          <span class="pedal" id="live-pedal">Pedal</span>
+        </div>
+      </div>
+      <div>
+        <div class="row"><label for="mod_amount" data-param-name="mod_amount"></label>
+          <input id="mod_amount" type="range" data-param="mod_amount"><output data-param-text="mod_amount"></output><small data-param-cc="mod_amount"></small></div>
+        <div class="row"><label for="bend_range" data-param-name="bend_range"></label>
+          <input id="bend_range" type="range" data-param="bend_range"><output data-param-text="bend_range"></output><small data-param-cc="bend_range"></small></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>Right-click a control to assign a knob of your MIDI controller (MIDI learn). Double-click resets it.</footer>
+<script>
+  const shapes = [
+    "M0 17 C 16 -6, 34 -6, 50 17 S 84 40, 100 17 S 134 -6, 150 17 S 184 40, 200 17",
+    "M0 30 L50 4 L50 30 L100 4 L100 30 L150 4 L150 30 L200 4",
+    "M0 30 L0 4 L50 4 L50 30 L100 30 L100 4 L150 4 L150 30 L200 30",
+  ];
+  // Buttons for a choice parameter.
+  function segmented(key, box, onChange) {
+    const p = apf.param(key);
+    const buttons = p.options.map((name, i) => {
+      const b = document.createElement("button");
+      b.textContent = name;
+      b.addEventListener("click", () => apf.change(key, i / p.steps));
+      box.appendChild(b);
+      return b;
+    });
+    apf.on(key, (v) => {
+      const i = Math.round(v * p.steps);
+      buttons.forEach((b, j) => b.classList.toggle("on", i === j));
+      if (onChange) onChange(i);
+    });
+  }
+  apf.ready.then(() => {
+    segmented("wave", document.getElementById("wave"), (i) =>
+      document.getElementById("wave-shape").setAttribute("d", shapes[i] || shapes[0]));
+    segmented("mod_target", document.getElementById("mod-target"));
+    // The player's mod wheel, pitch wheel and sustain pedal, live.
+    const wheel = document.getElementById("live-wheel");
+    const bend = document.getElementById("live-bend");
+    const pedal = document.getElementById("live-pedal");
+    apf.onSession(({ controllers: c }) => {
+      wheel.style.width = `${c.wheel * 100}%`;
+      bend.style.left = `${50 + Math.min(0, c.bend) * 50}%`;
+      bend.style.width = `${Math.max(Math.abs(c.bend) * 50, 2)}%`;
+      pedal.classList.toggle("on", c.pedal);
+    });
+    // Fill the slider track up to the thumb.
+    document.querySelectorAll("input[type=range]").forEach((el) => {
+      const paint = () => el.style.setProperty("--fill", `${el.value * 100}%`);
+      el.addEventListener("input", paint);
+      apf.on(el.dataset.param, paint);
+    });
+  });
+</script>
+</body>
+</html>

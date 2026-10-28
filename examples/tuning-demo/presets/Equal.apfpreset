@@ -1,0 +1,6 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.tuning-demo",
+  "name": "Equal",
+  "params": { "gain": -12, "attack": 5, "release": 400 }
+}

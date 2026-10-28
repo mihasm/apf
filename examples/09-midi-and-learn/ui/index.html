@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>APF Example 09 MIDI</title>
+<script src="/__apf/apf.js"></script>
+<style>
+  :root { --bg: #121318; --panel: #1b1d24; --line: #2a2d37; --text: #e6e7ec; --dim: #8b8fa0; --accent: #5eb3ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; overflow: hidden; }
+  main { padding: 18px 22px; display: flex; flex-direction: column; gap: 8px; }
+  /* name, slider, value, learned controller */
+  .row { display: grid; grid-template-columns: 80px 1fr 70px 40px; align-items: center; gap: 10px; }
+  label { color: var(--dim); }
+  output { text-align: right; font-variant-numeric: tabular-nums; }
+  small { color: var(--accent); font-size: 11px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+  .pedal { margin-top: 10px; display: flex; align-items: center; gap: 8px; color: var(--dim); }
+  .pedal i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--dim); }
+  .pedal.on { color: var(--text); }
+  .pedal.on i { background: var(--accent); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <!-- Right-click any bound control to start MIDI learn. data-param-cc shows the controller
+       that was learned ("CC 21"); it stays empty until one is. -->
+  <div class="row"><label for="cutoff" data-param-name="cutoff"></label><input id="cutoff" type="range" data-param="cutoff"><output data-param-text="cutoff"></output><small data-param-cc="cutoff"></small></div>
+  <div class="row"><label for="attack" data-param-name="attack"></label><input id="attack" type="range" data-param="attack"><output data-param-text="attack"></output><small data-param-cc="attack"></small></div>
+  <div class="row"><label for="release" data-param-name="release"></label><input id="release" type="range" data-param="release"><output data-param-text="release"></output><small data-param-cc="release"></small></div>
+  <div class="row"><label for="gain" data-param-name="gain"></label><input id="gain" type="range" data-param="gain"><output data-param-text="gain"></output><small data-param-cc="gain"></small></div>
+  <div class="row"><label data-param-name="wave"></label><select data-param="wave"></select><span></span><small data-param-cc="wave"></small></div>
+  <div class="pedal" id="pedal"><i></i>Pedal</div>
+</main>
+<script>
+  // The framework reports what the player's hands do (mod wheel, pitch wheel, sustain
+  // pedal) in the session; the plugin does not need to forward anything.
+  apf.ready.then(() => apf.onSession(({ controllers }) => document.getElementById("pedal").classList.toggle("on", controllers.pedal)));
+</script>
+</body>
+</html>

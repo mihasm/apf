@@ -1,0 +1,22 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.demo-synth",
+  "name": "Pluck",
+  "type": "Pluck",
+  "subtype": "Synth",
+  "mood": ["Bright", "Percussive"],
+  "description": "Square pluck with a resonant decay; the mod wheel opens it",
+  "params": {
+    "wave": "Square",
+    "cutoff": 1800,
+    "resonance": 0.45,
+    "release": 260,
+    "gain": -11,
+    "attack": 1.5,
+    "decay": 380,
+    "sustain": 0,
+    "mod_amount": 60,
+    "mod_target": "Cutoff",
+    "bend_range": 2
+  }
+}

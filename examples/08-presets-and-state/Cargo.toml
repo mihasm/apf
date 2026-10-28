@@ -1,0 +1,30 @@
+[package]
+name = "example-08-presets-and-state"
+description = "Example 08: factory and user presets, preset metadata, and session state beyond parameters"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+# staticlib: linked into every plugin format by the wrapper build; rlib: for the tests.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+apf.workspace = true
+apf-webview.workspace = true
+[dev-dependencies]
+apf-test.workspace = true
+
+# Read by `cargo xtask bundle`: how the plugin is packaged.
+[package.metadata.apf]
+name = "APF Example 08 Presets"
+bundle-id = "dev.miha.apf.example.presets"
+# Audio Unit identity. Type: aumu = instrument, aufx = effect, aumf = effect with MIDI.
+au-type = "aumu"
+# Four characters with at least one capital. The AUv3 gets the first three plus "3".
+au-subtype = "ExRs"
+au-manufacturer = "MiSm"
+au-manufacturer-name = "Miha Smrekar"

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>APF Example 08 Presets</title>
+<script src="/__apf/apf.js"></script>
+<style>
+  :root { --bg: #121318; --panel: #1b1d24; --line: #2a2d37; --text: #e6e7ec; --dim: #8b8fa0; --accent: #5eb3ff;
+    /* apf.js styles the preset bar with these variables. */
+    --apf-bg: var(--bg); --apf-panel: var(--panel); --apf-line: var(--line); --apf-text: var(--text);
+    --apf-dim: var(--dim); --apf-accent: var(--accent); --apf-accent-dim: #2b5d87; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; overflow: hidden; }
+  main { display: flex; flex-direction: column; gap: 12px; padding: 18px 22px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+  .row { display: grid; grid-template-columns: 80px 1fr 70px; align-items: center; gap: 10px; margin: 4px 0; }
+  label { color: var(--dim); }
+  output { text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select, input[type=number] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+  .chord { display: flex; gap: 10px; }
+  .chord input { width: 64px; }
+</style>
+</head>
+<body>
+<main>
+  <!-- The preset bar: list, previous/next, save, delete, and a mark when the sound was
+       changed since the preset was loaded. apf.js builds it. -->
+  <div data-apf-presets></div>
+  <section>
+    <h2>Chord (semitones above the key)</h2>
+    <!-- Not parameters: edited through the plugin's controller, see the script. -->
+    <div class="chord" id="chord"></div>
+  </section>
+  <section>
+    <div class="row"><label data-param-name="wave"></label><select data-param="wave"></select><span></span></div>
+    <div class="row"><label for="attack" data-param-name="attack"></label><input id="attack" type="range" data-param="attack"><output data-param-text="attack"></output></div>
+    <div class="row"><label for="release" data-param-name="release"></label><input id="release" type="range" data-param="release"><output data-param-text="release"></output></div>
+    <div class="row"><label for="gain" data-param-name="gain"></label><input id="gain" type="range" data-param="gain"><output data-param-text="gain"></output></div>
+  </section>
+</main>
+<script>
+  const boxes = [];
+  const box = document.getElementById("chord");
+  for (let i = 0; i < 4; i++) {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = -36;
+    input.max = 36;
+    // An empty box is an unused note.
+    input.addEventListener("change", () => {
+      const intervals = boxes.map((b) => b.value).filter((v) => v !== "").map(Number);
+      apf.plugin.post("chord", { intervals }).then(show);
+    });
+    boxes.push(input);
+    box.appendChild(input);
+  }
+  const show = (chord) => boxes.forEach((b, i) => (b.value = i < chord.intervals.length ? chord.intervals[i] : ""));
+  apf.ready.then(() => {
+    const refresh = () => apf.plugin.get("chord").then(show);
+    refresh();
+    // A preset or a session loaded by the host changes the chord behind the page's back;
+    // onChange hears of it (the controller's revision changed).
+    apf.plugin.onChange(refresh);
+  });
+</script>
+</body>
+</html>

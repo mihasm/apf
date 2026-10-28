@@ -1,0 +1,12 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.example.presets",
+  "name": "Major Triad",
+  "type": "Chord",
+  "subtype": "Triad",
+  "mood": ["Bright", "Open"],
+  "description": "One key plays a major chord",
+  "author": "APF",
+  "params": { "wave": "Saw", "attack": 8, "release": 400, "gain": -14 },
+  "controller": { "intervals": [0, 4, 7] }
+}

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The app sandbox is required for an AUv3 on macOS. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <!-- WebKit's helper processes (GPU, Networking) exit at once in a sandbox without this
+         ("Application does not have permission to communicate with network resources"),
+         even though the editor loads nothing from the network. Without it the web editor
+         stays blank. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Presets: the sandbox keeps the extension out of the user's Library. Its presets live
+         in ~/Library/Audio/Presets/<vendor>/<plugin>/, shared with the other formats (and
+         where Apple puts Audio Unit presets); this opens that folder, and nothing else. -->
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+    <array>
+        <string>/Library/Audio/Presets/</string>
+    </array>
+</dict>
+</plist>

@@ -1,0 +1,44 @@
+Presets keep the provider's order within one location
+
+preset_discovery.cpp sorted the presets of one location (the plugin itself, a container
+file) by load key, so a plugin's factory presets reached AU and VST3 hosts in alphabetical
+order whatever order the plugin declared them in. Sort by location only and let the stable
+sort keep the provider's order inside one: as deterministic, and the order the plugin means
+(a library laid out by type).
+
+--- a/src/detail/clap/preset_discovery.cpp
++++ b/src/detail/clap/preset_discovery.cpp
+@@ -570,13 +570,16 @@
+     // Factory content first: AU and VST3 numbers are positions, so a user saving a preset
+     // must not renumber the plugin's own (user files would otherwise sort before presets
+     // inside the plugin, by location kind).
++    // Within one location (the plugin itself, a container file) the presets keep the order
++    // the provider gave them in: as deterministic as sorting, and the order the plugin
++    // means (a library laid out by type, not by name). AU hosts show it as a flat list.
+     std::stable_sort(_presets.begin(), _presets.end(),
+                      [](const PresetEntry &a, const PresetEntry &b)
+                      {
+                        const bool userA = !a.isFactoryContent();
+                        const bool userB = !b.isFactoryContent();
+-                       return std::tie(userA, a.locationKind, a.location, a.loadKey) <
+-                              std::tie(userB, b.locationKind, b.location, b.loadKey);
++                       return std::tie(userA, a.locationKind, a.location) <
++                              std::tie(userB, b.locationKind, b.location);
+                      });
+   }
+ 
+--- a/src/detail/clap/preset_discovery.h
++++ b/src/detail/clap/preset_discovery.h
+@@ -37,8 +37,10 @@
+         are positional - a host stores the *index*, not the identity - so the
+         same content must always produce the same numbering, or reopening a
+         project silently selects a different preset. Presets are therefore
+-        sorted by (location kind, location, load key), never by the order the
+-        filesystem happened to hand them over.
++        sorted by (location kind, location), never by the order the
++        filesystem happened to hand them over; within one location (the plugin
++        itself, a container file) they keep the order the provider declared
++        them in, which is as deterministic and is the order the plugin means.
+ */
+ 
+ #include <atomic>

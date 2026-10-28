@@ -1,0 +1,219 @@
+AUv3: publish clap.preset-discovery as factory presets; factory presets first
+
+- auv3_audiounit.mm: factoryPresets from Clap::PresetIndex (as the AUv2 wrapper does),
+  currentPreset loads one through clap.preset-load, and a preset the plugin loads by
+  itself (clap_host_preset_load.loaded) becomes the current preset.
+- preset_discovery.cpp: sort factory content before user content, so saving a user
+  preset never renumbers the factory ones (AU and VST3 numbers are positions).
+
+diff --git a/src/detail/auv3/auv3_audiounit.mm b/src/detail/auv3/auv3_audiounit.mm
+index 5e6cae3..5fd8905 100644
+--- a/src/detail/auv3/auv3_audiounit.mm
++++ b/src/detail/auv3/auv3_audiounit.mm
+@@ -12,6 +12,7 @@
+ #include "detail/shared/fixedqueue.h"
+ #include "detail/shared/spinlock.h"
+ #include "detail/clap/automation.h"
++#include "detail/clap/preset_discovery.h"
+ 
+ #include <os/log.h>
+ #include <unistd.h>
+@@ -51,6 +52,7 @@ static thread_local bool s_suppressParamObserverEcho = false;
+ - (void)_notifyParameterValuesChanged;
+ - (void)_wireParameterObserver;
+ - (void)_applyGUISizeWidth:(uint32_t)width height:(uint32_t)height;
++- (void)_presetLoadedKind:(uint32_t)kind location:(const std::string &)location key:(const std::string &)key;
+ @end
+ 
+ // -----------------------------------------------------------------------
+@@ -680,6 +682,21 @@ class AUv3ImplDetail : public Clap::IHost, public Clap::IAutomation, public os::
+     return false;
+   }
+ 
++  // clap.preset-load: the plugin loaded a preset by itself (from its own UI). Point the
++  // host's currentPreset at it, as the AUv2 wrapper does with PresentPreset.
++  void preset_loaded(uint32_t location_kind, const char *location, const char *load_key) override
++  {
++    std::string loc = location ? location : "";
++    std::string key = load_key ? load_key : "";
++    __strong auto au = _audioUnit;
++    if (au)
++    {
++      dispatch_async(dispatch_get_main_queue(), ^{
++        [au _presetLoadedKind:location_kind location:loc key:key];
++      });
++    }
++  }
++
+   bool supportsContextMenu() const override
+   {
+     return false;
+@@ -1013,6 +1030,12 @@ static const char *const _windowApi = CLAP_WINDOW_API_COCOA;
+ @implementation ClapAUv3AudioUnit
+ {
+   std::unique_ptr<free_audio::auv3_wrapper::AUv3ImplDetail> _impl;
++  // clap.preset-discovery, published as AUv3 factory presets (number = index in the
++  // index's deterministic order, as in the AUv2 wrapper).
++  std::shared_ptr<Clap::PresetIndex> _presetIndex;
++  uint64_t _presetIndexToken;
++  NSArray<AUAudioUnitPreset *> *_factoryPresetsCache;
++  AUAudioUnitPreset *_currentPresetValue;
+   AUAudioUnitBusArray *_inputBusArray;
+   AUAudioUnitBusArray *_outputBusArray;
+   BOOL _renderResourcesAllocated;
+@@ -1169,6 +1192,30 @@ static const char *const _windowApi = CLAP_WINDOW_API_COCOA;
+     AUV3LOG("init: calling plugin->initialize()");
+     _impl->_plugin->initialize();
+ 
++    // Factory presets: index the plugin's preset-discovery provider in the background.
++    if (_impl->_plugin->supportsPresetLoad())
++    {
++      _presetIndex = Clap::PresetIndex::forPlugin(&_library, _impl->_desc->id);
++      if (_presetIndex)
++      {
++        __weak ClapAUv3AudioUnit *weakSelf = self;
++        _presetIndexToken = _presetIndex->addCompletionListener(
++            [weakSelf]()
++            {
++              dispatch_async(dispatch_get_main_queue(), ^{
++                ClapAUv3AudioUnit *strongSelf = weakSelf;
++                if (!strongSelf) return;
++                [strongSelf willChangeValueForKey:@"factoryPresets"];
++                @synchronized(strongSelf)
++                {
++                  strongSelf->_factoryPresetsCache = nil;
++                }
++                [strongSelf didChangeValueForKey:@"factoryPresets"];
++              });
++            });
++      }
++    }
++
+     // Cache the initial latency so the AUv3 host can read it from any thread.
+     if (_impl->_plugin->_ext._latency)
+     {
+@@ -1240,6 +1287,13 @@ static const char *const _windowApi = CLAP_WINDOW_API_COCOA;
+   AUV3LOG("dealloc: _impl=%{public}s, _plugin=%{public}s", _impl ? "valid" : "null",
+           (_impl && _impl->_plugin) ? "valid" : "null");
+ 
++  if (_presetIndex)
++  {
++    if (_presetIndexToken) _presetIndex->removeCompletionListener(_presetIndexToken);
++    _presetIndexToken = 0;
++    _presetIndex.reset();
++  }
++
+   if (_impl)
+   {
+     AUV3LOG("dealloc: stopping idle timer");
+@@ -1602,6 +1656,87 @@ static const char *const _windowApi = CLAP_WINDOW_API_COCOA;
+   return NO;
+ }
+ 
++// --- Factory presets (clap.preset-discovery + clap.preset-load) ---
++
++- (NSArray<AUAudioUnitPreset *> *)factoryPresets
++{
++  if (!_presetIndex) return @[];
++  @synchronized(self)
++  {
++    if (_factoryPresetsCache) return _factoryPresetsCache;
++  }
++  // A host asks early; a short wait beats an empty menu. A slower crawl is announced
++  // through KVO on factoryPresets when it completes.
++  if (!_presetIndex->waitUntilComplete(1000)) return @[];
++  const auto presets = _presetIndex->presets();
++  NSMutableArray<AUAudioUnitPreset *> *list = [NSMutableArray arrayWithCapacity:presets.size()];
++  for (size_t i = 0; i < presets.size(); ++i)
++  {
++    AUAudioUnitPreset *p = [AUAudioUnitPreset new];
++    p.number = (NSInteger)i;
++    NSString *name = [NSString stringWithUTF8String:presets[i].displayName().c_str()];
++    p.name = name ? name : @"Preset";
++    [list addObject:p];
++  }
++  @synchronized(self)
++  {
++    _factoryPresetsCache = list;
++  }
++  return list;
++}
++
++- (AUAudioUnitPreset *)currentPreset
++{
++  @synchronized(self)
++  {
++    return _currentPresetValue;
++  }
++}
++
++- (void)setCurrentPreset:(AUAudioUnitPreset *)preset
++{
++  if (preset && preset.number >= 0 && _presetIndex && _impl && _impl->_plugin)
++  {
++    Clap::PresetEntry entry;
++    if (!_presetIndex->presetAt((size_t)preset.number, entry))
++    {
++      AUV3ERR("setCurrentPreset: no preset %ld", (long)preset.number);
++      return;
++    }
++    bool loaded;
++    {
++      auto mainGuard = _impl->_plugin->AlwaysMainThread();
++      loaded = _impl->_plugin->loadPresetFromLocation(entry.locationKind,
++                                                      entry.location.empty() ? nullptr : entry.location.c_str(),
++                                                      entry.loadKey.empty() ? nullptr : entry.loadKey.c_str());
++    }
++    if (!loaded)
++    {
++      AUV3ERR("setCurrentPreset: the plugin refused preset %ld", (long)preset.number);
++      return;
++    }
++  }
++  @synchronized(self)
++  {
++    _currentPresetValue = preset;
++  }
++}
++
++- (void)_presetLoadedKind:(uint32_t)kind location:(const std::string &)location key:(const std::string &)key
++{
++  if (!_presetIndex) return;
++  size_t index = 0;
++  if (!_presetIndex->indexOf(kind, location.c_str(), key.c_str(), index)) return;
++  NSArray<AUAudioUnitPreset *> *presets = [self factoryPresets];
++  if (index >= presets.count) return;
++  [self willChangeValueForKey:@"currentPreset"];
++  @synchronized(self)
++  {
++    _currentPresetValue = presets[index];
++  }
++  [self didChangeValueForKey:@"currentPreset"];
++}
++
+ // --- State save/restore ---
+ 
+ - (NSDictionary<NSString *, id> *)fullState
+diff --git a/src/detail/clap/preset_discovery.cpp b/src/detail/clap/preset_discovery.cpp
+index 39bab0b..fa59df1 100644
+--- a/src/detail/clap/preset_discovery.cpp
++++ b/src/detail/clap/preset_discovery.cpp
+@@ -567,11 +567,16 @@ void PresetIndex::crawl(const clap_preset_discovery_factory_t *factory, std::str
+     // The ordering a host will store indices into. See the header: this is
+     // why it is sorted at all.
+     std::lock_guard<std::mutex> lock(_mutex);
++    // Factory content first: AU and VST3 numbers are positions, so a user saving a preset
++    // must not renumber the plugin's own (user files would otherwise sort before presets
++    // inside the plugin, by location kind).
+     std::stable_sort(_presets.begin(), _presets.end(),
+                      [](const PresetEntry &a, const PresetEntry &b)
+                      {
+-                       return std::tie(a.locationKind, a.location, a.loadKey) <
+-                              std::tie(b.locationKind, b.location, b.loadKey);
++                       const bool userA = !a.isFactoryContent();
++                       const bool userB = !b.isFactoryContent();
++                       return std::tie(userA, a.locationKind, a.location, a.loadKey) <
++                              std::tie(userB, b.locationKind, b.location, b.loadKey);
+                      });
+   }
+ 

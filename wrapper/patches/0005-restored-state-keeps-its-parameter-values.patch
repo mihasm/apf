@@ -1,0 +1,176 @@
+diff --git a/src/detail/auv3/auv3_audiounit.mm b/src/detail/auv3/auv3_audiounit.mm
+index 1e12b4a..a45090c 100644
+--- a/src/detail/auv3/auv3_audiounit.mm
++++ b/src/detail/auv3/auv3_audiounit.mm
+@@ -50,6 +50,7 @@ static thread_local bool s_suppressParamObserverEcho = false;
+ @interface ClapAUv3AudioUnit ()
+ - (void)_replaceParameterTree;
+ - (void)_notifyParameterValuesChanged;
++- (void)_publishPluginParameterValues;
+ - (void)_wireParameterObserver;
+ - (void)_applyGUISizeWidth:(uint32_t)width height:(uint32_t)height;
+ - (void)_presetLoadedKind:(uint32_t)kind location:(const std::string &)location key:(const std::string &)key;
+@@ -1739,9 +1740,56 @@ static const char *const _windowApi = CLAP_WINDOW_API_COCOA;
+ 
+ // --- State save/restore ---
+ 
++// The plugin's own parameter values, into the value cache and into the AUParameter objects
++// the host reads and the base class saves in fullState's "data" — without sending them back
++// to the plugin. A plugin changes values by itself (its editor loads a preset, a session load
++// moves them); the tree's objects keep whatever was last set through them until told.
++// Main thread (the caller holds the plugin's main-thread guard).
++- (void)_publishPluginParameterValues
++{
++  if (!_impl || !_impl->_plugin || !_impl->_plugin->_ext._params) return;
++  auto *params = _impl->_plugin->_ext._params;
++  auto *plug = _impl->_plugin->_plugin;
++  std::vector<std::pair<clap_id, double>> values;
++  uint32_t numParams = params->count(plug);
++  values.reserve(numParams);
++  for (uint32_t i = 0; i < numParams; ++i)
++  {
++    clap_param_info_t info;
++    if (params->get_info(plug, i, &info))
++    {
++      double value = 0;
++      if (params->get_value(plug, info.id, &value)) values.emplace_back(info.id, value);
++    }
++  }
++  {
++    std::lock_guard<std::mutex> lock(_impl->_paramCacheMutex);
++    for (auto &v : values) _impl->_paramValueCache[v.first] = v.second;
++  }
++  AUParameterTree *tree = _impl->_parameterTree;
++  if (!tree) return;
++  // setValue: re-enters implementorValueObserver on this thread; these values come from the
++  // plugin, so the observer must not queue them for it.
++  s_suppressParamObserverEcho = true;
++  for (auto &v : values)
++  {
++    AUParameter *param = [tree parameterWithAddress:(AUParameterAddress)v.first];
++    if (param && param.value != (AUValue)v.second)
++      [param setValue:(AUValue)v.second originator:_impl->_parameterObserverToken];
++  }
++  s_suppressParamObserverEcho = false;
++}
++
+ - (NSDictionary<NSString *, id> *)fullState
+ {
+   AUV3LOG("fullState (save): entered");
++  // The base class saves the tree's values as "data": bring them in line with the plugin
++  // first, so a host or an older reader of "data" finds what the CLAP state holds.
++  if (_impl && _impl->_plugin)
++  {
++    auto mainGuard = _impl->_plugin->AlwaysMainThread();
++    [self _publishPluginParameterValues];
++  }
+   NSMutableDictionary *state = [[super fullState] mutableCopy];
+   if (!state) state = [NSMutableDictionary new];
+ 
+@@ -1767,48 +1815,44 @@ static const char *const _windowApi = CLAP_WINDOW_API_COCOA;
+ - (void)setFullState:(NSDictionary<NSString *, id> *)fullState
+ {
+   AUV3LOG("setFullState (restore): entered");
+-  [super setFullState:fullState];
++  NSData *clapState = fullState[@"clapState"];
++  bool clap = clapState && _impl && _impl->_plugin && _impl->_plugin->_ext._state;
++
++  // With a CLAP state, the parameter values are in it. The base class would restore its own
++  // copy of them ("data") by setting every parameter of the tree, and while render resources
++  // are allocated each of those settings is queued for the next render — which comes after
++  // the CLAP state below has loaded, and so overwrote it with the values "data" held. Those
++  // can be older than the state (a plugin changes values by itself, and the tree only knew
++  // what was last set through it): a restored session then played with old parameter
++  // values until something set them again.
++  if (clap)
++  {
++    NSMutableDictionary *rest = [fullState mutableCopy];
++    [rest removeObjectForKey:@"data"];
++    [super setFullState:rest];
++  }
++  else
++  {
++    [super setFullState:fullState];
++  }
+ 
+-  if (_impl && _impl->_plugin && _impl->_plugin->_ext._state)
++  if (clap)
+   {
+-    NSData *clapState = fullState[@"clapState"];
+-    if (clapState)
+-    {
+-      AUV3LOG("setFullState (restore): loading %zu bytes of CLAP state", (size_t)[clapState length]);
+-      Clap::StateMemento chunk;
+-      chunk.setData((const uint8_t *)[clapState bytes], [clapState length]);
+-      auto mainGuard = _impl->_plugin->AlwaysMainThread();
+-      _impl->_plugin->_ext._state->load(_impl->_plugin->_plugin, chunk);
++    AUV3LOG("setFullState (restore): loading %zu bytes of CLAP state", (size_t)[clapState length]);
++    Clap::StateMemento chunk;
++    chunk.setData((const uint8_t *)[clapState bytes], [clapState length]);
++    auto mainGuard = _impl->_plugin->AlwaysMainThread();
++    _impl->_plugin->_ext._state->load(_impl->_plugin->_plugin, chunk);
+ 
+-      // Refresh the parameter cache after state restore — all values may have
+-      // changed. Collect first so the lock is not held across get_value() calls.
+-      if (_impl->_plugin->_ext._params)
+-      {
+-        auto *params = _impl->_plugin->_ext._params;
+-        auto *plug = _impl->_plugin->_plugin;
+-        std::vector<std::pair<clap_id, double>> values;
+-        uint32_t numParams = params->count(plug);
+-        values.reserve(numParams);
+-        for (uint32_t i = 0; i < numParams; ++i)
+-        {
+-          clap_param_info_t info;
+-          if (params->get_info(plug, i, &info))
+-          {
+-            double value = 0;
+-            if (params->get_value(plug, info.id, &value)) values.emplace_back(info.id, value);
+-          }
+-        }
+-        {
+-          std::lock_guard<std::mutex> lock(_impl->_paramCacheMutex);
+-          for (auto &v : values) _impl->_paramValueCache[v.first] = v.second;
+-        }
+-      }
+-      AUV3LOG("setFullState (restore): completed");
+-    }
+-    else
+-    {
+-      AUV3LOG("setFullState (restore): no clapState key in dictionary");
+-    }
++    // All values may have changed: the cache and the tree follow the plugin, and the host
++    // re-reads them.
++    [self _publishPluginParameterValues];
++    [self _notifyParameterValuesChanged];
++    AUV3LOG("setFullState (restore): completed");
++  }
++  else if (_impl && _impl->_plugin && _impl->_plugin->_ext._state)
++  {
++    AUV3LOG("setFullState (restore): no clapState key in dictionary");
+   }
+ }
+ 
+diff --git a/src/wrapasauv2.cpp b/src/wrapasauv2.cpp
+index 2c451b6..e5a1466 100644
+--- a/src/wrapasauv2.cpp
++++ b/src/wrapasauv2.cpp
+@@ -2204,7 +2204,8 @@ OSStatus WrapAsAUV2::SaveState(CFPropertyListRef *ptPList)
+ {
+   if (!ptPList) return kAudioUnitErr_InvalidParameter;
+ 
+-  if (!IsInitialized()) return kAudioUnitErr_Uninitialized;
++  // The CLAP state extension works whether or not the plugin is activated, and a host may
++  // save or restore a unit that is not initialized: refusing here lost the session.
+ 
+   auto guarantee_mainthread = _plugin->AlwaysMainThread();
+ 
+@@ -2272,7 +2273,7 @@ OSStatus WrapAsAUV2::RestoreState(CFPropertyListRef plist)
+ {
+   if (!plist) return kAudioUnitErr_InvalidParameter;
+ 
+-  if (!IsInitialized()) return kAudioUnitErr_Uninitialized;
++  // As in SaveState: the state loads into an uninitialized unit too.
+ 
+   CFDictionaryRef tDict = CFDictionaryRef(plist);
+ 

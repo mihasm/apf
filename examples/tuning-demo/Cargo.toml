@@ -1,0 +1,28 @@
+[package]
+name = "tuning-demo"
+description = "A microtuned sine synth: shows a plugin controller (session state beyond parameters, editor requests)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+# staticlib: linked into every format by the wrapper build; rlib: for the tests.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+apf.workspace = true
+apf-webview.workspace = true
+
+[dev-dependencies]
+clap-sys.workspace = true
+
+[package.metadata.apf]
+name = "APF Tuning Demo"
+bundle-id = "dev.miha.apf.tuning-demo"
+au-type = "aumu"
+au-subtype = "ApTu"
+au-manufacturer = "MiSm"
+au-manufacturer-name = "Miha Smrekar"

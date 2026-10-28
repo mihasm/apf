@@ -1,0 +1,22 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.demo-synth",
+  "name": "Square Bass",
+  "type": "Bass",
+  "subtype": "Synth",
+  "mood": ["Dark", "Deep"],
+  "description": "Resonant square bass; bends an octave",
+  "params": {
+    "wave": "Square",
+    "cutoff": 520,
+    "resonance": 0.5,
+    "release": 120,
+    "gain": -9,
+    "attack": 2,
+    "decay": 260,
+    "sustain": 55,
+    "mod_amount": 70,
+    "mod_target": "Cutoff",
+    "bend_range": 12
+  }
+}

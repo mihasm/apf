@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>APF Example 07 GUI</title>
+<!-- apf.js is served by the framework; it defines window.apf and binds data-param elements. -->
+<script src="/__apf/apf.js"></script>
+<style>
+  :root { --bg: #121318; --panel: #1b1d24; --line: #2a2d37; --text: #e6e7ec; --dim: #8b8fa0; --accent: #5eb3ff; }
+  * { box-sizing: border-box; }
+  /* The editor may be resized: the page fills whatever window it gets. */
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; overflow: hidden; }
+  main { display: flex; flex-direction: column; justify-content: center; gap: 14px; height: 100%; padding: 20px 24px; }
+  .row { display: grid; grid-template-columns: 60px 1fr 70px; align-items: center; gap: 10px; }
+  label { color: var(--dim); }
+  output { text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .controls { display: flex; align-items: center; gap: 24px; }
+  .controls label { display: flex; align-items: center; gap: 8px; }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+  .meter { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px; min-height: 28px; }
+  .meter i { position: relative; display: block; flex: 1; max-height: 14px; border-radius: 3px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+  .meter b { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <!-- A slider bound to the parameter "gain". Name and value text are bound the same way.
+       Double-click resets it; right-click starts MIDI learn. -->
+  <div class="row">
+    <label for="gain" data-param-name="gain"></label>
+    <input id="gain" type="range" data-param="gain">
+    <output data-param-text="gain"></output>
+  </div>
+  <div class="controls">
+    <!-- A checkbox for a bool parameter; a select for a choice (the options are filled in). -->
+    <label><input type="checkbox" data-param="mute"><span data-param-name="mute"></span></label>
+    <label><span data-param-name="listen"></span><select data-param="listen"></select></label>
+  </div>
+  <!-- The meter is not a parameter: the script below polls the plugin's controller. -->
+  <div class="meter"><i><b></b></i><i><b></b></i></div>
+</main>
+<div data-apf-resize-grip></div>
+<script>
+  const bars = [...document.querySelectorAll(".meter b")];
+  const shown = [0, 0];
+  // Peak (0..1+) to a bar width: 60 dB of range, as most meters do.
+  const width = (peak) => `${Math.max(0, Math.min(1, (20 * Math.log10(peak || 1e-6) + 60) / 60)) * 100}%`;
+
+  apf.ready.then(() => {
+    // apf.poller calls the function often while something is happening and rarely when
+    // the signal is silent, and not at all while the editor is hidden. Returning true
+    // means "there was activity": keep the fast rate.
+    apf.poller(async () => {
+      const peaks = await apf.plugin.get("meter"); // {l, r}: peaks since the last poll
+      [peaks.l, peaks.r].forEach((peak, i) => {
+        shown[i] = Math.max(peak, shown[i] * 0.85); // fall back smoothly
+        bars[i].style.width = width(shown[i]);
+      });
+      return shown[0] > 1e-3 || shown[1] > 1e-3;
+    });
+  });
+</script>
+</body>
+</html>

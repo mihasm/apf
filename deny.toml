@@ -1,0 +1,38 @@
+# cargo-deny configuration: `cargo deny check licenses` (and `bans`, `sources`) from the
+# repository root. The licence rules are what keeps APF's promise that everything a shipped
+# plugin contains is permissively licensed (docs/licences.md).
+
+[graph]
+# Check what is built for the platforms APF targets, not every platform of every crate.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+]
+
+[licenses]
+# A crate passes when one of its licence alternatives ("MIT OR Apache-2.0") is allowed.
+# Copyleft is absent on purpose: GPL, LGPL, AGPL, MPL (option-ext is replaced by
+# third_party/option-ext), EUPL, CC-BY-NC and the like are rejected.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CC0-1.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

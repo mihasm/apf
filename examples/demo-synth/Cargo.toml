@@ -1,0 +1,31 @@
+[package]
+name = "demo-synth"
+description = "A small polyphonic synth showing the framework end to end"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+# staticlib: linked into every format by the wrapper build; rlib: for the tests.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+apf.workspace = true
+apf-webview.workspace = true
+
+[dev-dependencies]
+clap-sys.workspace = true
+
+# Read by `cargo xtask bundle`: how the plugin is packaged.
+[package.metadata.apf]
+name = "APF Demo Synth"
+bundle-id = "dev.miha.apf.demo-synth"
+# Audio Unit identity. Type: aumu = instrument, aufx = effect, aumf = effect with MIDI.
+au-type = "aumu"
+au-subtype = "ApDs"
+# Four characters with at least one capital: all-lowercase codes are reserved by Apple.
+au-manufacturer = "MiSm"
+au-manufacturer-name = "Miha Smrekar"

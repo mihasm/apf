@@ -1,0 +1,22 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.demo-synth",
+  "name": "Sine Lead",
+  "type": "Lead",
+  "subtype": "Soft",
+  "mood": ["Soft", "Clean"],
+  "description": "Pure sine lead; the mod wheel adds vibrato",
+  "params": {
+    "wave": "Sine",
+    "cutoff": 8000,
+    "resonance": 0.1,
+    "release": 220,
+    "gain": -8,
+    "attack": 12,
+    "decay": 250,
+    "sustain": 85,
+    "mod_amount": 60,
+    "mod_target": "Vibrato",
+    "bend_range": 2
+  }
+}

@@ -1,0 +1,81 @@
+diff --git a/src/detail/auv3/auv3_parameters.mm b/src/detail/auv3/auv3_parameters.mm
+index 8c0c2f2..4e617a4 100644
+--- a/src/detail/auv3/auv3_parameters.mm
++++ b/src/detail/auv3/auv3_parameters.mm
+@@ -36,6 +36,9 @@ struct GroupNode
+ {
+   std::string name;
+   std::map<std::string, std::unique_ptr<GroupNode>> children;
++  // Child group names in the order the plugin first used them: hosts show the groups in
++  // tree order, and the plugin's parameter order is the one its author chose.
++  std::vector<std::string> childOrder;
+   NSMutableArray<AUParameter *> *parameters = nil;
+ 
+   GroupNode() : parameters([NSMutableArray new])
+@@ -47,9 +50,9 @@ struct GroupNode
+     NSMutableArray *groupChildren = [NSMutableArray new];
+ 
+     // Add sub-groups first
+-    for (auto &[childName, child] : children)
++    for (const auto &childName : childOrder)
+     {
+-      [groupChildren addObject:child->toGroup()];
++      [groupChildren addObject:children[childName]->toGroup()];
+     }
+     // Then parameters
+     for (AUParameter *p in parameters)
+@@ -127,6 +130,25 @@ ParameterTreeResult createParameterTree(const clap_plugin_t *plugin, const clap_
+       }
+     }
+ 
++    // An indexed parameter shows its steps by name only when the tree carries them: without
++    // valueStrings hosts bridging to the v2 API (Logic) show the bare index ("0" for "Sine").
++    NSMutableArray<NSString *> *valueStrings = nil;
++    if (isStepped && unit == kAudioUnitParameterUnit_Indexed && info.max_value - info.min_value <= 256)
++    {
++      valueStrings = [NSMutableArray new];
++      for (auto v = (int64_t)info.min_value; v <= (int64_t)info.max_value; ++v)
++      {
++        char buf[256];
++        if (!params->value_to_text(plugin, info.id, (double)v, buf, sizeof(buf)))
++        {
++          valueStrings = nil;
++          break;
++        }
++        NSString *text = [NSString stringWithUTF8String:buf];
++        [valueStrings addObject:text ? text : @""];
++      }
++    }
++
+     NSString *identifier = [NSString stringWithFormat:@"clap_%llu", (unsigned long long)info.id];
+     NSString *displayName = [NSString stringWithUTF8String:info.name];
+ 
+@@ -138,7 +160,7 @@ ParameterTreeResult createParameterTree(const clap_plugin_t *plugin, const clap_
+                                                                    unit:unit
+                                                                unitName:nil
+                                                                   flags:flags
+-                                                           valueStrings:nil
++                                                           valueStrings:valueStrings
+                                                     dependentParameters:nil];
+     param.value = (AUValue)info.default_value;
+ 
+@@ -159,6 +181,7 @@ ParameterTreeResult createParameterTree(const clap_plugin_t *plugin, const clap_
+         {
+           auto node = std::make_unique<GroupNode>();
+           node->name = part;
++          current->childOrder.push_back(part);
+           current->children[part] = std::move(node);
+           current = current->children[part].get();
+         }
+@@ -172,9 +195,9 @@ ParameterTreeResult createParameterTree(const clap_plugin_t *plugin, const clap_
+   }
+ 
+   // Build the final tree: top-level groups + ungrouped params
+-  for (auto &[childName, child] : root.children)
++  for (const auto &childName : root.childOrder)
+   {
+-    [topLevelChildren addObject:child->toGroup()];
++    [topLevelChildren addObject:root.children[childName]->toGroup()];
+   }
+ 
+   AUParameterTree *tree = [AUParameterTree createTreeWithChildren:topLevelChildren];

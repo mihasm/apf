@@ -1,0 +1,10 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.tuning-demo",
+  "name": "Just Intonation",
+  "params": { "gain": -12, "attack": 5, "release": 600 },
+  "controller": {
+    "name": "5-limit just intonation on C",
+    "cents": [0, 11.731, 3.910, 15.641, -13.686, -1.955, -9.776, 1.955, 13.686, -15.641, 17.596, -11.731]
+  }
+}

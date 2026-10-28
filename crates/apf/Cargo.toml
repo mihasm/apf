@@ -1,0 +1,16 @@
+[package]
+name = "apf"
+description = "Core of the audio plugin framework: plugin trait, parameters, real-time process callback and the CLAP backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+clap-sys.workspace = true

@@ -1,0 +1,9 @@
+[book]
+title = "Building audio plugins with APF"
+authors = ["Miha Smrekar"]
+language = "en"
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/mihasm/apf"
+edit-url-template = "https://github.com/mihasm/apf/edit/main/docs/book/{path}"

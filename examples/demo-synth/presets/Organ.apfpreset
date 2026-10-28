@@ -1,0 +1,22 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.demo-synth",
+  "name": "Organ",
+  "type": "Organ",
+  "subtype": "Combo",
+  "mood": ["Vintage", "Warm"],
+  "description": "Square organ with a quick release; the mod wheel adds vibrato",
+  "params": {
+    "wave": "Square",
+    "cutoff": 3200,
+    "resonance": 0.05,
+    "release": 70,
+    "gain": -14,
+    "attack": 6,
+    "decay": 50,
+    "sustain": 100,
+    "mod_amount": 35,
+    "mod_target": "Vibrato",
+    "bend_range": 2
+  }
+}

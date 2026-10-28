@@ -1,0 +1,89 @@
+diff --git a/src/detail/auv3/auv3_audiounit.mm b/src/detail/auv3/auv3_audiounit.mm
+index a45090c..8a08f21 100644
+--- a/src/detail/auv3/auv3_audiounit.mm
++++ b/src/detail/auv3/auv3_audiounit.mm
+@@ -71,6 +71,7 @@ class queueEvent
+     editstart,
+     editvalue,
+     editend,
++    hostvalue,
+   } type_t;
+   type_t _type;
+   union
+@@ -750,6 +751,19 @@ class AUv3ImplDetail : public Clap::IHost, public Clap::IAutomation, public os::
+     _queueToUI.push(evt);
+   }
+ 
++  // Automation the host scheduled into the render: the value cache must follow it, or the
++  // tree keeps reporting the value last set through it (a knob moved by hand) while the
++  // plugin plays the automation, and the host's controls show that stale value.
++  void onHostValue(clap_id id, double value) override
++  {
++    queueEvent evt;
++    evt._type = queueEvent::type::hostvalue;
++    evt._data._value = {};
++    evt._data._value.param_id = id;
++    evt._data._value.value = value;
++    _queueToUI.push(evt);
++  }
++
+   // Drain the audio→UI parameter queue and forward automation events to the host.
+   // Safe to call while processing — only touches AUParameter objects, no CLAP calls.
+   void drainParameterQueue()
+@@ -814,6 +828,25 @@ class AUv3ImplDetail : public Clap::IHost, public Clap::IAutomation, public os::
+           }
+           break;
+         }
++        case queueEvent::type::hostvalue:
++        {
++          // The cache the tree's value provider reads, and the tree's own value: a host out
++          // of process mirrors the tree and only refreshes on a set. No touch or release
++          // around it — the host sent this value, it is not an edit to record — and the echo
++          // to the plugin is suppressed above.
++          bool changed;
++          {
++            std::lock_guard<std::mutex> lock(_paramCacheMutex);
++            auto &cached = _paramValueCache[evt._data._value.param_id];
++            changed = cached != evt._data._value.value;
++            cached = evt._data._value.value;
++          }
++          AUParameter *param =
++              [_parameterTree parameterWithAddress:(AUParameterAddress)evt._data._value.param_id];
++          if (param && changed)
++            [param setValue:(AUValue)evt._data._value.value originator:_parameterObserverToken];
++          break;
++        }
+       }
+ 
+       s_suppressParamObserverEcho = false;
+diff --git a/src/detail/auv3/process.mm b/src/detail/auv3/process.mm
+index 7b24f7a..ab57ef5 100644
+--- a/src/detail/auv3/process.mm
++++ b/src/detail/auv3/process.mm
+@@ -496,6 +496,9 @@ void ProcessAdapter::translateAUv3Events(const AURenderEvent *head, AUEventSampl
+ 
+         _eventindices.emplace_back(_events.size());
+         _events.emplace_back(n);
++        // Host automation reaches the plugin only here, never through the parameter tree:
++        // tell the wrapper, so the value the tree reports to the host follows it.
++        if (_automation) _automation->onHostValue(pid, n.param.value);
+         break;
+       }
+ 
+diff --git a/src/detail/clap/automation.h b/src/detail/clap/automation.h
+index 1a813c9..96fe8c6 100644
+--- a/src/detail/clap/automation.h
++++ b/src/detail/clap/automation.h
+@@ -18,6 +18,12 @@ class IAutomation
+   virtual void onRequestPresetLoad(size_t /*presetIndex*/)
+   {
+   }
++
++  // The host set a parameter by an event in the render (AUv3 automation is scheduled there,
++  // not set on the parameter tree). Audio thread: queue it, never lock or block.
++  virtual void onHostValue(clap_id /*id*/, double /*value*/)
++  {
++  }
+   virtual ~IAutomation()
+   {
+   }

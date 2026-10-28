@@ -1,0 +1,12 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.example.presets",
+  "name": "Power Fifth",
+  "type": "Chord",
+  "subtype": "Fifth",
+  "mood": ["Hollow"],
+  "description": "Root, fifth and octave",
+  "author": "APF",
+  "params": { "wave": "Square", "attack": 3, "release": 200, "gain": -18 },
+  "controller": { "intervals": [0, 7, 12] }
+}

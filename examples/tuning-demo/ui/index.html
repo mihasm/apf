@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APF Tuning Demo</title>
+<script src="/__apf/apf.js"></script>
+<style>
+  :root {
+    --bg: #121318; --panel: #1b1d24; --line: #2a2d37; --text: #e6e7ec; --dim: #8b8fa0;
+    --accent: #e0a458; --accent-dim: #6b4d2a;
+    --apf-bg: var(--bg); --apf-panel: var(--panel); --apf-line: var(--line); --apf-text: var(--text);
+    --apf-dim: var(--dim); --apf-accent: var(--accent); --apf-accent-dim: var(--accent-dim);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; overflow: hidden; }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px 6px; }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+  header [data-apf-presets] { flex: 1; max-width: 380px; margin-left: auto; }
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.6fr); gap: 10px; padding: 8px 20px 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; min-height: 0; overflow: auto; }
+  h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+  .row { display: grid; grid-template-columns: 64px 1fr 68px; align-items: center; gap: 8px; margin: 2px 0; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; }
+  .row label { color: var(--dim); }
+  .row.black label { color: var(--text); opacity: .7; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; background: transparent; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; margin-top: -4.5px;
+    border-radius: 50%; background: var(--text); border: 2px solid var(--accent); }
+  .name { display: flex; gap: 8px; margin-bottom: 8px; }
+  .name input { flex: 1; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: inherit; user-select: text; -webkit-user-select: text; }
+  .note { color: var(--dim); font-size: 11px; margin-top: 10px; }
+  .size { position: fixed; right: 24px; bottom: 4px; font-size: 10px; color: var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>APF Tuning Demo</h1>
+  <div data-apf-presets></div>
+  <button class="apf-btn" data-apf-maximize></button>
+</header>
+<main>
+  <section>
+    <h2>Sound</h2>
+    <div class="row"><label data-param-name="gain"></label><input type="range" data-param="gain"><output data-param-text="gain"></output></div>
+    <div class="row"><label data-param-name="attack"></label><input type="range" data-param="attack"><output data-param-text="attack"></output></div>
+    <div class="row"><label data-param-name="release"></label><input type="range" data-param="release"><output data-param-text="release"></output></div>
+    <p class="note">The tuning is kept by the plugin's controller: it is saved with the session and in presets, but it is not a host parameter.</p>
+  </section>
+  <section>
+    <h2>Tuning</h2>
+    <div class="name"><input id="name" spellcheck="false" aria-label="Tuning name"></div>
+    <div id="cents"></div>
+  </section>
+</main>
+<div class="size" id="size"></div>
+<div data-apf-resize-grip></div>
+<script>
+  const NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+  const rows = [];
+  const box = document.getElementById("cents");
+  const nameEl = document.getElementById("name");
+  NAMES.forEach((n, i) => {
+    const row = document.createElement("div");
+    row.className = "row" + ([1, 3, 6, 8, 10].includes(i) ? " black" : "");
+    row.innerHTML = `<label>${n}</label><input type="range" min="-50" max="50" step="0.1"><output></output>`;
+    const input = row.querySelector("input");
+    const out = row.querySelector("output");
+    input.addEventListener("input", () => {
+      out.textContent = fmt(Number(input.value));
+      send({ cents: rows.map((r) => Number(r.input.value)) });
+    });
+    input.addEventListener("dblclick", () => {
+      input.value = 0;
+      input.dispatchEvent(new Event("input"));
+    });
+    rows.push({ input, out });
+    box.appendChild(row);
+  });
+  const fmt = (c) => `${c > 0 ? "+" : ""}${c.toFixed(1)} ct`;
+
+  // One request at a time; while one is out, only the latest edit waits for its turn.
+  let busy = false, waiting = null;
+  async function send(edit) {
+    if (busy) return void (waiting = edit);
+    busy = true;
+    try {
+      const r = await apf.plugin.post("tuning", edit);
+      if (!r.ok) apf.log("tuning refused:", r.error);
+    } catch (e) {
+      apf.log("tuning request failed:", String(e));
+    }
+    busy = false;
+    if (waiting) {
+      const next = waiting;
+      waiting = null;
+      send(next);
+    }
+  }
+  nameEl.addEventListener("change", () => send({ name: nameEl.value }));
+
+  function show(t) {
+    if (document.activeElement !== nameEl) nameEl.value = t.name;
+    t.cents.forEach((c, i) => {
+      if (document.activeElement !== rows[i].input) rows[i].input.value = c;
+      rows[i].out.textContent = fmt(c);
+    });
+  }
+  async function refresh() {
+    if (busy) return;
+    const r = await apf.plugin.get("tuning");
+    show(r.tuning);
+  }
+  // The page follows the window the host gives it; the size goes to the log too, for the
+  // resize checks in real hosts.
+  let logged = null;
+  const size = () => {
+    const text = `${innerWidth} × ${innerHeight}`;
+    document.getElementById("size").textContent = text;
+    clearTimeout(logged);
+    logged = setTimeout(() => window.apf && apf.log(`page size ${innerWidth}x${innerHeight}`), 150);
+  };
+  addEventListener("resize", size);
+  size();
+  apf.ready.then(() => {
+    refresh();
+    // A preset or a session loaded by the host changes the tuning behind the page's back.
+    apf.plugin.onChange(refresh);
+  });
+</script>
+</body>
+</html>

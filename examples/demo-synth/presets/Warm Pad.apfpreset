@@ -1,0 +1,22 @@
+{
+  "apf-preset": 1,
+  "plugin": "dev.miha.apf.demo-synth",
+  "name": "Warm Pad",
+  "type": "Pad",
+  "subtype": "Warm",
+  "mood": ["Warm", "Soft", "Mellow"],
+  "description": "Slow saw pad; the mod wheel opens the filter",
+  "params": {
+    "wave": "Saw",
+    "cutoff": 1100,
+    "resonance": 0.15,
+    "release": 1600,
+    "gain": -15,
+    "attack": 650,
+    "decay": 1500,
+    "sustain": 80,
+    "mod_amount": 45,
+    "mod_target": "Cutoff",
+    "bend_range": 2
+  }
+}

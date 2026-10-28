@@ -1,0 +1,33 @@
+[package]
+name = "apf-webview"
+description = "Web (HTML/JS) editors for apf plugins: a system webview (wry) embedded in the host's window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+# Web inspector in release builds too (it is always on in debug builds). On macOS this uses
+# private API: never ship it to the App Store.
+devtools = ["wry/devtools"]
+
+[dependencies]
+apf.workspace = true
+wry.workspace = true
+raw-window-handle.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# The version wry 0.57 uses.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSGeometry", "NSNotification", "NSOperation", "NSRunLoop", "NSString", "NSObject", "block2"] }
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSView", "NSResponder", "NSGraphics", "NSEvent", "NSScreen", "NSApplication", "block2"] }

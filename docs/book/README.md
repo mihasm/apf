@@ -29,6 +29,7 @@ or presets) is marked `ignore`; that example's own `cargo test` covers it.
 
 ## Publish it
 
-The book is served by GitHub Pages from the `gh-pages` branch at
-<https://mihasm.github.io/apf/>. There is no CI: after changing the book, run
-`scripts/publish-book.sh`. It builds the book and pushes the result to `gh-pages`.
+The book is published at <https://mihasm.github.io/apf/> by the GitHub Actions workflow
+`.github/workflows/book.yml`: every push to `main` that changes `docs/book/` or `examples/`
+builds it with mdBook and deploys it to GitHub Pages. This is the only workflow in the
+repository. It can also be started by hand from the Actions tab.

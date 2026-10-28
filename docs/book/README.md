@@ -29,7 +29,6 @@ or presets) is marked `ignore`; that example's own `cargo test` covers it.
 
 ## Publish it
 
-`docs/book/book/` is a static site: copy it to any web host. For GitHub Pages, the repository
-must be public (or on a paid GitHub plan), and Pages set to publish from a branch or from a
-build step. There is no CI workflow in this repository, so build locally and publish
-`docs/book/book/` yourself, for example to a `gh-pages` branch.
+The book is served by GitHub Pages from the `gh-pages` branch at
+<https://mihasm.github.io/apf/>. There is no CI: after changing the book, run
+`scripts/publish-book.sh`. It builds the book and pushes the result to `gh-pages`.

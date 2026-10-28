@@ -79,10 +79,10 @@ a network connection. Then rescan plugins in your music program.
 
 ## Where to go next
 
-The book in [docs/book](docs/book) teaches APF step by step, from installing to presets and
-testing. Read it in a browser with [mdBook](https://rust-lang.github.io/mdBook/)
-(`cargo install mdbook`, then `mdbook serve docs/book --open`), or open the Markdown files in
-`docs/book/src`.
+The book teaches APF step by step, from installing to presets and testing. Read it online at
+**[mihasm.github.io/apf](https://mihasm.github.io/apf/)**, or build it yourself from
+[docs/book](docs/book) with [mdBook](https://rust-lang.github.io/mdBook/)
+(`cargo install mdbook`, then `mdbook serve docs/book --open`).
 
 Ten small examples, each a complete plugin with a test that renders audio without a sound card:
 

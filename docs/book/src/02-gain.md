@@ -42,5 +42,5 @@ unchanged before sample 100.
 
 ```sh
 cargo test -p example-02-gain
-cargo xtask bundle example-02-gain
+cargo xtask bundle example-02-gain --install
 ```

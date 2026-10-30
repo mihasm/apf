@@ -23,13 +23,34 @@ wrappers had bugs APF carries patches (`wrapper/patches/`) and checks them with 
 ## Building
 
 ```sh
-cargo xtask bundle <package>                    # CLAP, VST3, AUv2, standalone → dist/release/
-cargo xtask bundle <package> --formats all      # plus AUv3 (macOS, needs Xcode)
-cargo xtask bundle <package> --install          # copy into the plugin folders
-cargo xtask install <package> --hot             # development: swap in new builds while the host runs (see Hot reload)
-cargo xtask validate <package>                  # build, then run every validator
-cargo xtask bundle <package> --project ../mine  # a plugin in its own workspace
+cargo xtask bundle <plugin>                     # CLAP, VST3, AUv2, standalone → dist/release/
+cargo xtask bundle <plugin> --formats all       # plus AUv3 (macOS, needs Xcode)
+cargo xtask bundle <plugin> --formats clap,vst3 # only these (clap, vst3, auv2, auv3, standalone)
+cargo xtask bundle <plugin> --debug             # a debug build → dist/debug/
+cargo xtask bundle <plugin> --install           # and copy into the plugin folders
+cargo xtask install <plugin>                    # copy what is built (takes the same --formats)
+cargo xtask install <plugin> --hot              # development: swap in new builds while the host runs (see Hot reload)
+cargo xtask validate <plugin>                   # run every validator on the built plugin
 ```
+
+`<plugin>` is the package name. In a project of its own (one made by `cargo xtask new`) run
+the commands in the project's folder and leave the name out; its `.cargo/config.toml` points
+`cargo xtask` at APF's build tool, and the bundles land in its own `dist/`. From the APF
+repository, `--project <dir>` names such a project instead. `cargo xtask --help` lists every
+option.
+
+`bundle` builds the plugin as a Rust static library, then the CMake project in `wrapper/`,
+which links it into each format with clap-wrapper. Each plugin, profile and generator has its
+own wrapper build folder in `<cargo target dir>/apf-wrapper/`, with its own copy of
+clap-wrapper and the SDKs; their compiler output goes to `apf-build.log` in that folder
+(`--verbose` shows it instead). The AUv3 is built by Xcode in a folder of its own.
+
+**Where `install` puts the plugin (macOS):** `~/Library/Audio/Plug-Ins/CLAP`, `VST3` and
+`Components`; the AUv3 is an app extension inside `~/Applications/<name> AUv3.app`, registered
+with LaunchServices. `install` also restarts the Audio Unit registry so a new Audio Unit is
+found at once. To remove a plugin, delete its files from those folders. The standalone app
+stays in `dist/`; do not leave it running unattended ([Known issues](known-issues.md)). On
+Windows see [Windows](windows.md).
 
 The packaging identity lives in the plugin's `Cargo.toml`:
 

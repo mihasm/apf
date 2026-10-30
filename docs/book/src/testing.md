@@ -56,9 +56,11 @@ cargo run --release -p apf-host -- "dist/release/APF Example 07 GUI.clap" --gui 
 it, then the other way round, then resizes the window and sends keys. Nothing is played to a
 sound card.
 
-**`cargo xtask validate <plugin>`** builds the plugin and runs the third-party validators on
-it: clap-validator, the Steinberg VST3 validator, Apple's `auval` (macOS), and APF's own state
-checks (a restored session must sound the same, in several restore orders). [Validation](validation.md)
+**`cargo xtask validate <plugin>`** runs the third-party validators on the plugin that
+`cargo xtask bundle` built: clap-validator, the Steinberg VST3 validator, Apple's `auval`
+(macOS, on the installed Audio Units), and APF's own state checks (a restored session must
+sound the same, in several restore orders). clap-validator is installed separately; the
+command says how when it is missing. [Validation](validation.md)
 lists the tools and what they found. With `--hot` it also checks that the
 [hot-reload](hot-reload.md) shell swaps in a new build in a CLAP host and in both Audio Unit
 versions. The run expects a plugin with parameters, and the web view

@@ -27,6 +27,14 @@ versions.
 - `docs/licences.md` lists every component and its licence; `deny.toml` lets `cargo deny`
   check them; `cargo xtask notices` prints the licence texts a shipped plugin must carry.
 - `docs/todo.md`: the known open work.
+- `cargo xtask` works in a plugin's own project: `cargo xtask new` writes a
+  `.cargo/config.toml` that runs APF's xtask there, the project is the workspace the command
+  runs in, and the plugin's name can be left out when the workspace has one plugin
+  (`cargo xtask bundle --install`). `--project` still works from the APF repository.
+- `cargo xtask --help` lists the commands and options; a wrong plugin name lists the plugins
+  of the workspace; `bundle` says when CMake, the C++ compiler or Xcode (for AUv3) is missing
+  before it compiles anything.
+- Example READMEs for `demo-synth` and `tuning-demo`.
 - `scripts/au-legato-check.swift`, run by `cargo xtask validate` for AUv3 instruments: a note
   struck again legato keeps sounding. `au-check-preset` in `[package.metadata.apf]` names a
   factory preset for it to load.
@@ -57,6 +65,12 @@ versions.
 - The README is short: what APF is, a small example, a quick start, the status and links. The
   reference material that used to be in it is now in the book.
 - `docs/known-issues.md` is grouped by area, with a status for every item.
+- `cargo xtask bundle` writes the CMake and C++ compiler output to `apf-build.log` in the
+  wrapper build folder and shows its last lines when the build fails; `--verbose` shows it
+  all as before. Cargo's progress shows while the Rust library compiles.
+- The README's quick start and the book's "Install and first plugin" chapter go from the
+  prerequisites to the plugin in a host, then to a project of your own; build options,
+  install locations and removing a plugin moved to "Hosts and formats".
 
 ## APF 0.1.0 (2026-10-28)
 

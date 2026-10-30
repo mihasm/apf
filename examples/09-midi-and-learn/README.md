@@ -16,9 +16,11 @@ A small synth that works well with a keyboard and a controller.
 **Build and try it**
 
 ```sh
-cargo test -p example-09-midi-and-learn
-cargo xtask bundle example-09-midi-and-learn
+cargo test -p example-09-midi-and-learn                  # plays notes in memory
+cargo xtask bundle example-09-midi-and-learn --install   # builds it and installs it for your host
 ```
+
+In your host it is **APF Example 09 MIDI**.
 
 **Look at**
 

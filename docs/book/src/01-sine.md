@@ -53,5 +53,5 @@ zero takes forever in floating point, so `process` declares silence once the lev
 
 ```sh
 cargo test -p example-01-sine
-cargo xtask bundle example-01-sine
+cargo xtask bundle example-01-sine --install
 ```

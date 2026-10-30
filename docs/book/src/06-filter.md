@@ -49,5 +49,5 @@ end of the block is the portable second line of defence and brings the state to 
 
 ```sh
 cargo test -p example-06-filter
-cargo xtask bundle example-06-filter
+cargo xtask bundle example-06-filter --install
 ```

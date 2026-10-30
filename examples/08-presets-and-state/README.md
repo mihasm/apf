@@ -17,9 +17,11 @@ list, so it lives in a `Controller`.
 **Build and try it**
 
 ```sh
-cargo test -p example-08-presets-and-state
-cargo xtask bundle example-08-presets-and-state
+cargo test -p example-08-presets-and-state                  # plays notes in memory
+cargo xtask bundle example-08-presets-and-state --install   # builds it and installs it for your host
 ```
+
+In your host it is **APF Example 08 Presets**.
 
 **Look at**
 

@@ -57,5 +57,5 @@ to edit the page and reload without rebuilding.
 
 ```sh
 cargo test -p example-07-gui
-cargo xtask bundle example-07-gui
+cargo xtask bundle example-07-gui --install
 ```

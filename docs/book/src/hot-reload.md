@@ -63,7 +63,8 @@ old value stays. A new instance gets the new default.
 **5. When you are done,** stop the watcher with Ctrl+C. Put the normal plugin back with
 `cargo xtask install example-10-synth --formats all`, and restart the host once more.
 
-A plugin in its own project works the same way: add `--project ../my-synth` to both commands.
+A plugin in its own project works the same way: run the commands in the project's folder,
+without the plugin's name (`cargo xtask install --hot`, then `cargo xtask hot --watch`).
 The plugin's code needs nothing for it: every plugin made with `apf::export_plugin!` can be
 hot-reloaded.
 

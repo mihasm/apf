@@ -20,13 +20,13 @@ memory, and adds one idea to the one before. Read them in order.
 ## Working with an example
 
 ```sh
-cargo test -p example-01-sine          # plays a note in memory
-cargo xtask bundle example-01-sine     # CLAP, VST3, AUv2, standalone in dist/release/
-cargo xtask new my-synth               # a project of your own, from example 01
+cargo test -p example-01-sine                    # plays a note in memory
+cargo xtask bundle example-01-sine --install     # builds it and installs it for your host
 ```
 
 Open the example's `src/lib.rs`, change something, and run its test. The "Try it" list at the
-end of each chapter has ideas.
+end of each chapter has ideas. To hear a change in your host without restarting it, use
+[hot reload](hot-reload.md).
 
-Each example's folder also has a short `README.md`, and `tests/process.rs` shows how the
-plugin is tested through the same interface a host uses.
+Each example's `tests/process.rs` shows how the plugin is tested through the same interface a
+host uses.

@@ -43,5 +43,5 @@ would cut the sound. `note_on` keeps the current level and ramps up from there.
 
 ```sh
 cargo test -p example-04-envelope
-cargo xtask bundle example-04-envelope
+cargo xtask bundle example-04-envelope --install
 ```

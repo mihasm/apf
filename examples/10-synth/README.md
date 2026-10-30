@@ -26,9 +26,9 @@ the pitch wheel bends every voice by `Bend Range` semitones.
 **Build and try it**
 
 ```sh
-cargo test -p example-10-synth
-cargo xtask bundle example-10-synth
-cargo xtask validate example-10-synth
+cargo test -p example-10-synth                    # plays notes in memory
+cargo xtask bundle example-10-synth --install     # builds it and installs it for your host
+cargo xtask validate example-10-synth             # the validators (clap-validator, auval, state checks)
 ```
 
 **Look at**

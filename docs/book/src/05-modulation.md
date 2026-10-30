@@ -42,5 +42,5 @@ pitch. For slow changes you could tick once per block with `set_rate(hz, sample_
 
 ```sh
 cargo test -p example-05-modulation
-cargo xtask bundle example-05-modulation
+cargo xtask bundle example-05-modulation --install
 ```

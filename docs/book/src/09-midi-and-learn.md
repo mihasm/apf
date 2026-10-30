@@ -57,5 +57,5 @@ identical up to the sample of the change.
 
 ```sh
 cargo test -p example-09-midi-and-learn
-cargo xtask bundle example-09-midi-and-learn
+cargo xtask bundle example-09-midi-and-learn --install
 ```

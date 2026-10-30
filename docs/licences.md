@@ -175,9 +175,9 @@ accompany copies of the software, binaries included. The plugins contain the Rus
 and the wrapper components, so a plugin you distribute needs a notices file.
 
 ```sh
-cargo xtask notices                                  # the framework: apf and apf-webview
-cargo xtask notices my-synth                         # one plugin of this workspace
-cargo xtask notices my-synth --project ../my-synth   # a plugin in its own workspace
+cargo xtask notices                                  # in APF: the framework (apf and apf-webview);
+                                                     # in a plugin's own project: its plugin
+cargo xtask notices my-synth                         # one plugin of the workspace
 cargo xtask notices my-synth --platform windows      # macos (default with windows), windows, linux, all
 cargo xtask notices my-synth --out dist/release/THIRD_PARTY_NOTICES.txt
 ```

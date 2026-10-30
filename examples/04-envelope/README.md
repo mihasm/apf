@@ -14,8 +14,8 @@ A polyphonic synth: eight voices, an ADSR envelope, velocity.
 **Build and try it**
 
 ```sh
-cargo test -p example-04-envelope
-cargo xtask bundle example-04-envelope
+cargo test -p example-04-envelope                  # plays notes in memory
+cargo xtask bundle example-04-envelope --install   # builds it and installs it for your host
 ```
 
 **Look at**

@@ -7,14 +7,17 @@
 | `crates/apf-host` | a minimal CLAP host for tests: renders audio and drives the web view end to end |
 | `crates/apf-hot` | the hot-reload shell: runs a plugin from a published dynamic library and swaps in new builds |
 | `crates/apf-test` | test a plugin through the CLAP interface in memory, with the counting allocator |
-| `examples/01-sine` to `09-midi-and-learn` | the example ladder; `10-synth` is a guide to `demo-synth` |
+| `examples/01-sine` to `10-synth` | the example ladder |
 | `examples/demo-synth` | 16-voice synth: sine, saw and square (PolyBLEP), resonant state-variable low-pass, ADSR, sustain pedal, pitch bend, mod wheel (cutoff, vibrato, resonance, gain), factory presets, web view |
 | `examples/tuning-demo` | microtuned sine synth: the controller example (tuning kept outside the parameters, in sessions and presets, edited through `apf.plugin`) with a resizable web view |
 | `wrapper/` | CMake project building every format with clap-wrapper, and its patches |
-| `xtask/` | `cargo xtask bundle / install / validate / new` |
+| `xtask/` | `cargo xtask bundle / install / hot / validate / new / notices` (`cargo xtask --help`) |
 | `third_party/option-ext` | MIT re-implementation of an MPL-2.0 transitive dependency (see [Licences](licences.md)) |
 | `docs/book` | this book (mdBook sources) |
 | `docs/known-issues.md` | open problems and host quirks |
+
+The build commands and the packaging settings in a plugin's `Cargo.toml`
+(`[package.metadata.apf]`) are in [Hosts and formats](hosts-and-formats.md).
 
 ## Test and validation tools
 
@@ -41,19 +44,3 @@
 | 0005 | a restored session keeps its parameter values (AUv2 and AUv3) |
 | 0006 | the AUv3 parameter tree follows host automation |
 | 0007 | AUv3: a note struck again legato keeps its key |
-
-## Packaging settings
-
-Packaging settings live in the plugin's `Cargo.toml`:
-
-```toml
-[package.metadata.apf]
-name = "APF Demo Synth"
-bundle-id = "dev.miha.apf.demo-synth"
-au-type = "aumu"          # aumu instrument, aufx effect, aumf effect with MIDI
-au-subtype = "ApDs"
-au-manufacturer = "MiSm"  # at least one capital letter; all-lowercase is Apple's
-au-manufacturer-name = "Miha Smrekar"
-```
-
-[Hosts and formats](hosts-and-formats.md) explains each field.

@@ -14,9 +14,12 @@ An effect: audio in, audio out, one parameter.
 **Build and try it**
 
 ```sh
-cargo test -p example-02-gain
-cargo xtask bundle example-02-gain
+cargo test -p example-02-gain                    # plays audio through it in memory
+cargo xtask bundle example-02-gain --install     # builds it and installs it for your host
 ```
+
+In your host it is **APF Example 02 Gain**, an audio effect: put it on a track that plays
+audio and move its Gain slider.
 
 **Look at**
 

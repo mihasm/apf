@@ -13,8 +13,8 @@ A state-variable filter effect: low-pass, band-pass, high-pass and notch.
 **Build and try it**
 
 ```sh
-cargo test -p example-06-filter
-cargo xtask bundle example-06-filter
+cargo test -p example-06-filter                  # plays audio through it in memory
+cargo xtask bundle example-06-filter --install   # builds it and installs it for your host
 ```
 
 **Look at**

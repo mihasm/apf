@@ -1,76 +1,95 @@
 # Install and first plugin
 
-## Build an example
+This chapter builds an example plugin, puts it into your host, and starts a project of your
+own. It is written for macOS; on Windows the same commands build CLAP and VST3, with the
+differences in [Windows](windows.md).
+
+## What you need
+
+- [Rust](https://rustup.rs) 1.85 or newer.
+- A C++ compiler and CMake 3.24 or newer, for the plugin formats:
+
+  ```sh
+  xcode-select --install     # Xcode's command line tools
+  brew install cmake         # or the installer from https://cmake.org/download
+  ```
+
+- Git, and a network connection for the first build of each plugin.
+- Only for the Audio Unit v3: Xcode itself, from the App Store. Everything else builds
+  without it.
+
+## Run an example's test
 
 ```sh
 git clone https://github.com/mihasm/apf && cd apf
-cargo test -p example-02-gain          # plays audio through the plugin, in memory
-cargo xtask bundle example-02-gain     # builds the plugin files into dist/release/
+cargo test -p example-02-gain
 ```
 
-`cargo xtask` is a command in this repository (an alias for the `xtask` package). `bundle`
-builds the plugin's Rust code, then a CMake project (`wrapper/`) that turns it into each
-format. The first build downloads [clap-wrapper](https://github.com/free-audio/clap-wrapper),
-the VST3 SDK and Apple's AudioUnitSDK, so it needs a network connection and is slower than
-the ones after it.
+The test loads the gain plugin through the same C interface a host uses, plays audio through
+it in memory and checks the result. No sound card is opened. This is how you will check most
+changes: in seconds, without a host.
 
-The result is in `dist/release/` (on macOS):
+## Build it and install it
+
+```sh
+cargo xtask bundle example-02-gain --install
+```
+
+`cargo xtask` is the repository's build tool: a Cargo alias that runs its `xtask` package, so
+there is nothing to install. `bundle` compiles the plugin, then builds the C++ wrapper that
+turns it into each format ([clap-wrapper](https://github.com/free-audio/clap-wrapper)).
+`--install` copies the result to `~/Library/Audio/Plug-Ins/`, where hosts look for plugins.
+
+The first build of a plugin downloads clap-wrapper and the plugin SDKs (about 50 MB) and
+compiles them. On an M2 with a fast connection that took 20 to 40 seconds; a rebuild after a
+change takes a few seconds. A debug build (`--debug`) and the AUv3 have build folders of their
+own, so their first build costs the same again. The C++ compiler output goes to a log file,
+named if the build fails; `--verbose` shows it as it runs.
+
+The plugin files are in `dist/release/`:
 
 ```text
 APF Example 02 Gain.clap         CLAP
 APF Example 02 Gain.vst3         VST3
 APF Example 02 Gain.component    Audio Unit v2
-APF Example 02 Gain.app          standalone app
+APF Example 02 Gain.app          standalone app (not installed)
 ```
 
-An Audio Unit v3 is built when you ask for it (it needs Xcode):
-`cargo xtask bundle example-02-gain --formats all`. `--formats clap,vst3` picks formats by
-name (`clap`, `vst3`, `auv2`, `auv3`, `standalone`).
+## Hear it
 
-## Install
+Start your host, or rescan its plugins if it is running. Put **APF Example 02 Gain** (vendor
+*Miha Smrekar*) on a track that plays audio:
 
-```sh
-cargo xtask bundle example-02-gain --install     # build and install
-cargo xtask install example-02-gain              # install what is built (same formats options)
-```
+- **REAPER:** *FX* on the track, then search for "APF". REAPER lists the CLAP, VST3 and AU
+  versions; any of them works.
+- **Logic Pro:** an *Audio FX* slot, then *Audio Units* > *Miha Smrekar* > *APF Example 02
+  Gain*. Logic checks a new Audio Unit when it starts.
 
-On macOS this copies the plugins to `~/Library/Audio/Plug-Ins/{CLAP,VST3,Components}`, puts
-the AUv3 host app in `~/Applications` (registered with LaunchServices), and refreshes the Audio
-Unit registry. Then rescan plugins in your host. On Windows see [Windows](windows.md).
-
-Do not leave the standalone app running unattended: it has an open problem
-([Known issues](known-issues.md)).
-
-While you work on a plugin, you need not quit the host for every build. On macOS,
-`cargo xtask install example-02-gain --hot` installs a version that swaps in each new build
-while the host runs ([Hot reload](hot-reload.md)).
+The gain plugin has no window of its own, so the host shows its one parameter, Gain, as a
+plain slider. Move it and the track gets louder or quieter. For an instrument, build
+`example-01-sine` the same way, put it on an instrument track and play a note.
 
 ## Start your own plugin
 
 ```sh
-cargo xtask new my-synth
+cargo xtask new my-synth --vendor "Ann Example" --id-prefix org.annexample --manufacturer AnEx
+cd ../my-synth
+cargo test
+cargo xtask bundle --install
 ```
 
-This writes a new project from example 01 next to the APF repository, with your names and
-fresh identifiers. The project is its own Cargo workspace and depends on `apf` by path. Options:
+`new` writes a project next to the APF repository, made from example 01 (a sine instrument):
+its own Cargo workspace that depends on `apf` by path, with your names. In its folder,
+`cargo xtask` runs APF's build tool for that project, and the plugin's name can be left out.
+The plugin files land in `../my-synth/dist/release/`.
 
-```text
-cargo xtask new <name> [--path DIR] [--vendor TEXT] [--id-prefix org.me] [--manufacturer MeSy]
-```
-
-Set `--vendor`, `--id-prefix` and `--manufacturer` now: the plugin id and the Audio Unit codes
-derived from them are stored in your users' projects and cannot change once released
-([Hosts and formats](hosts-and-formats.md)).
-
-Test it in the new folder with `cargo test`. To build the formats, run this in the APF
-repository (`bundle`, `install` and `validate` all take `--project`):
-
-```sh
-cargo xtask bundle my-synth --project ../my-synth [--install]
-```
-
-Cargo runs in your workspace with your own cargo configuration, and the bundles land in
-`../my-synth/dist/<profile>/`.
+Choose the three options now. `--vendor` is the name hosts show. `--id-prefix` makes the
+plugin's id (`org.annexample.my-synth`), and `--manufacturer` is your four-character Audio Unit
+code (at least one capital letter, the same for all your plugins). Hosts store the id and
+the Audio Unit codes in every saved project, so they must not change once someone uses the
+plugin. Without the options you get placeholders (`com.example`, `Xmpl`, "Your Name");
+change them later in `Cargo.toml` and `src/lib.rs`. [Hosts and formats](hosts-and-formats.md)
+explains each setting.
 
 ## What a plugin looks like
 
@@ -115,4 +134,5 @@ apf::export_plugin!(Gain);
 - `process` runs on the audio thread for every block of audio.
 - `export_plugin!` makes the type a plugin in every format.
 
-The next chapters take these apart. Or go straight to [the example ladder](ladder.md).
+The next chapters take these apart. Or go straight to [the example ladder](ladder.md). To try
+changes in a running host without restarting it, see [Hot reload](hot-reload.md).

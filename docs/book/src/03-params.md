@@ -40,5 +40,5 @@ definitions.
 
 ```sh
 cargo test -p example-03-params
-cargo xtask bundle example-03-params
+cargo xtask bundle example-03-params --install
 ```

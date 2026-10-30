@@ -14,10 +14,12 @@ The smallest instrument: play a MIDI note, hear a sine wave. About 120 lines, mo
 **Build and try it**
 
 ```sh
-cargo test -p example-01-sine                      # renders audio in memory, no sound card
-cargo xtask bundle example-01-sine                 # CLAP, VST3, AUv2, standalone → dist/release/
-cargo xtask bundle example-01-sine --install       # … and copy them to your plugin folders
+cargo test -p example-01-sine                    # plays a note in memory, no sound card
+cargo xtask bundle example-01-sine --install     # builds CLAP, VST3, AUv2 and the app, installs them
 ```
+
+In your host it is **APF Example 01 Sine** (vendor *Miha Smrekar*), an instrument: put it on
+an instrument track and play a note.
 
 **Look at**
 
@@ -25,14 +27,10 @@ cargo xtask bundle example-01-sine --install       # … and copy them to your p
 - `tests/process.rs` – a test that loads the plugin through the CLAP interface like a host,
   plays a note, measures the pitch and proves that `process` does not allocate memory.
 
-`cargo xtask validate example-01-sine` runs the same checks as for the larger examples
-(clap-validator, the test host's render, the VST3 validator, the session check). The test host
-finds no web view and skips its web view round trip. The `Level` knob is there because
-clap-validator 0.4.1 crashes on a plugin with no parameter at all (a division by zero inside
-the validator); it is the one thing this example carries for the hosts' sake.
+The `Level` knob is there because clap-validator 0.4.1 crashes on a plugin with no parameter
+at all, so `cargo xtask validate example-01-sine` passes like the larger examples.
 
-**This example stays tiny on purpose.** Everything past a note and a knob (a second voice,
-an envelope, a filter, a web view, presets) has its own example, 02 to 10. Resist adding to
-this one: it is also the template `cargo xtask new` copies.
+This example is also the template `cargo xtask new` copies, so it stays this small: a second
+voice, an envelope, a filter, a web view and presets each have their own example, 02 to 10.
 
 Next: [02 – Gain](../02-gain)

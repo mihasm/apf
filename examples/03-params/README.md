@@ -14,8 +14,8 @@ A small channel tool that uses every kind of parameter.
 **Build and try it**
 
 ```sh
-cargo test -p example-03-params
-cargo xtask bundle example-03-params
+cargo test -p example-03-params                  # plays audio through it in memory
+cargo xtask bundle example-03-params --install   # builds it and installs it for your host
 ```
 
 **Look at**

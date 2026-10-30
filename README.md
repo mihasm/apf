@@ -1,31 +1,59 @@
 # APF - (Rust) Audio Plugin Framework
 
-**Write multiplatform plugins using Rust, drawing the interface in HTML.**
+**Audio plugins in Rust, with a web page as the window.**
 
-APF is a framework for audio plugins: the instruments and effects you load into a music
-program such as Logic Pro or REAPER. You write the sound in Rust. The plugin's window is a web
-page. One crate becomes a plugin in every common format.
-
-- **Formats:** CLAP, VST3, Audio Unit (v2 and v3) and a standalone app, built from the same code.
-- **Web interface:** HTML, CSS and JavaScript, shown by the system's browser engine. MIDI learn, presets,
-  resizing and host automation need no extra code.
-  The web view comes from [wry](https://github.com/tauri-apps/wry), the web-view library of
-  the [Tauri](https://tauri.app) project (WebKit on macOS, WebView2 on Windows).
-- **Hot reload (macOS):** save a source file and the new build plays in the running host
-  within seconds. The project, the plugin's settings and its window stay open
-  (`cargo xtask hot <plugin> --watch`). Checked in Logic Pro;
-  see the book's [Hot reload](docs/book/src/hot-reload.md) chapter.
-- **Real-time safe:** every example is tested under a counting allocator that fails if
-  `process` allocates memory.
-- **MIT:** the framework is MIT licensed and its dependencies are permissively licensed.
+A plugin is an instrument or an effect that you load into a music program (a *host*), such as
+Logic Pro or REAPER. With APF you write one Rust type for the sound and, if you want a window,
+one web page. The build turns them into a CLAP, a VST3, an Audio Unit (v2 and v3) and a
+standalone app.
 
 ![The APF demo synth: a web page as the plugin window](docs/images/demo-synth.png)
 
 The demo synth in `examples/demo-synth`. Its window is an ordinary web page.
 
-## A plugin
+## Quick start (macOS)
 
-A gain control, complete. (`examples/02-gain` is the same plugin with smoothing, so the volume
+You need [Rust](https://rustup.rs) 1.85 or newer, Xcode's command line tools and CMake 3.24 or
+newer:
+
+```sh
+xcode-select --install     # the C++ compiler
+brew install cmake         # or the installer from https://cmake.org/download
+```
+
+Build an example and install it:
+
+```sh
+git clone https://github.com/mihasm/apf && cd apf
+cargo test -p example-02-gain                  # plays audio through the plugin in memory
+cargo xtask bundle example-02-gain --install   # builds CLAP, VST3, AUv2 and an app, installs them
+```
+
+The first `bundle` of a plugin downloads clap-wrapper and the plugin SDKs (about 50 MB) and
+compiles them: 20 to 40 seconds on an M2 with a fast connection. Later builds take a few
+seconds.
+
+Then start your host, or rescan its plugins, and put **APF Example 02 Gain** (vendor *Miha
+Smrekar*) on an audio track. It has no window of its own, so the host shows its one
+parameter, Gain, as a plain slider.
+
+On Windows the same commands build CLAP and VST3; installing needs an elevated shell. See
+the book's [Windows](docs/book/src/windows.md) chapter.
+
+## Your own plugin
+
+```sh
+cargo xtask new my-synth          # writes ../my-synth: a sine instrument made from example 01
+cd ../my-synth
+cargo xtask bundle --install
+```
+
+`cargo xtask new` takes `--vendor`, `--id-prefix` and `--manufacturer`. Set them before you
+release: hosts store the plugin's id and Audio Unit codes in every saved project.
+
+## What a plugin looks like
+
+A gain effect, complete. (`examples/02-gain` is the same plugin with smoothing, so the volume
 does not click when you turn the knob.)
 
 ```rust
@@ -58,36 +86,30 @@ impl Plugin for Gain {
 apf::export_plugin!(Gain);
 ```
 
-The web view is a page. This is all it takes to show the slider:
+A web view is a page. This one shows a slider bound to the parameter:
 
 ```html
 <script src="/__apf/apf.js"></script>
 <input type="range" data-param="gain">
 ```
 
-## Quick start
+## What you get
 
-You need [Rust](https://rustup.rs) and, on macOS, Xcode's command line tools and CMake
-(Windows: Visual Studio 2022 Build Tools and CMake; see the book).
+- **Formats:** CLAP, VST3, Audio Unit v2 and v3, and a standalone app, from the same code.
+  The plugin never sees which one it runs in.
+- **Web view:** HTML, CSS and JavaScript, shown by the system's browser engine through
+  [wry](https://github.com/tauri-apps/wry) (WebKit on macOS, WebView2 on Windows). Parameter
+  bindings, MIDI learn, presets and resizing need no code of yours.
+- **Hot reload (macOS):** save a source file and a few seconds later the new build plays in
+  the running host, with the project, the plugin's settings and its window still open
+  (`cargo xtask hot --watch`; the book's [Hot reload](docs/book/src/hot-reload.md) chapter).
+- **Tests without a host:** a test loads the plugin through the same C interface a host uses
+  and renders audio in memory. Every example's test fails if `process` allocates memory.
 
-```sh
-git clone https://github.com/mihasm/apf && cd apf
-cargo test -p example-02-gain                    # plays audio through the plugin, in memory
-cargo xtask bundle example-02-gain               # builds the plugin files into dist/release/
-cargo xtask bundle example-02-gain --install     # also copies them where music programs look
-cargo xtask install example-02-gain --hot        # while developing: new builds swap into the running host
-cargo xtask new my-synth                         # starts a project of your own
-```
+## Learn
 
-The first build downloads clap-wrapper and the VST3 SDK (see [wrapper/](wrapper)), so it needs
-a network connection. Then rescan plugins in your music program.
-
-## Where to go next
-
-The book teaches APF step by step, from installing to presets and testing. Read it online at
-**[mihasm.github.io/apf](https://mihasm.github.io/apf/)**, or build it yourself from
-[docs/book](docs/book) with [mdBook](https://rust-lang.github.io/mdBook/)
-(`cargo install mdbook`, then `mdbook serve docs/book --open`).
+The book teaches APF step by step: **[mihasm.github.io/apf](https://mihasm.github.io/apf/)**
+(sources in [docs/book](docs/book)).
 
 Ten small examples, each a complete plugin with a test that renders audio without a sound card:
 

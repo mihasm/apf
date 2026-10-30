@@ -14,8 +14,8 @@ A one-voice lead with an LFO, mod wheel and pitch bend.
 **Build and try it**
 
 ```sh
-cargo test -p example-05-modulation
-cargo xtask bundle example-05-modulation
+cargo test -p example-05-modulation                  # plays notes in memory
+cargo xtask bundle example-05-modulation --install   # builds it and installs it for your host
 ```
 
 **Look at**

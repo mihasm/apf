@@ -50,5 +50,5 @@ folder with `preset::save_in` and reads it back with its metadata and chord.
 
 ```sh
 cargo test -p example-08-presets-and-state
-cargo xtask bundle example-08-presets-and-state
+cargo xtask bundle example-08-presets-and-state --install
 ```

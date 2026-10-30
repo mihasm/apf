@@ -48,7 +48,9 @@ foreach (patch IN LISTS apf_patches)
 endforeach()
 string(SHA256 apf_patches_hash "${apf_patch_hashes}")
 # Pinned: clap-wrapper v0.17.0 (MIT). It downloads, also pinned, the CLAP SDK (MIT),
-# the VST3 SDK (MIT since 3.8) and Apple's AudioUnitSDK (Apache-2.0).
+# the VST3 SDK (MIT since 3.8) and Apple's AudioUnitSDK (Apache-2.0), once per machine into
+# CPM's source cache (CPM_SOURCE_CACHE, which xtask sets; patch 0008), not into every build
+# folder. The SDK sources there are only read: every build compiles them in its own folder.
 FetchContent_Declare(clap-wrapper
         GIT_REPOSITORY https://github.com/free-audio/clap-wrapper.git
         GIT_TAG 806bba0a5f792e3966b99c1561ab9952d3316d7c

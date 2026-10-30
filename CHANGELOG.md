@@ -35,12 +35,18 @@ versions.
   of the workspace; `bundle` says when CMake, the C++ compiler or Xcode (for AUv3) is missing
   before it compiles anything.
 - Example READMEs for `demo-synth` and `tuning-demo`.
+- `cargo xtask uninstall <plugin>` removes a plugin from the plugin folders in every format,
+  and unregisters every copy of its AUv3, including the one Xcode built.
 - `scripts/au-legato-check.swift`, run by `cargo xtask validate` for AUv3 instruments: a note
   struck again legato keeps sounding. `au-check-preset` in `[package.metadata.apf]` names a
   factory preset for it to load.
 
 ### Fixed
 
+- `cargo xtask validate` on an effect: `vst3-state-check` and `au-state-check` fed the effect
+  silence (and the AUv2's input bus was off), so every scenario compared silence and failed.
+  An effect (VST3 Fx, AU `aufx` or `aumf`) now gets a test signal on its main input, a sine in
+  every octave band the checks compare; instruments still get silence.
 - `cargo xtask validate`: `vst3-state-check` is configured again when its shared build folder
   was configured from another checkout of APF; a deleted checkout made it fail to build.
 - AUv3: a note struck again legato (a note-off and the next note-on of the same key on one
@@ -68,9 +74,14 @@ versions.
 - `cargo xtask bundle` writes the CMake and C++ compiler output to `apf-build.log` in the
   wrapper build folder and shows its last lines when the build fails; `--verbose` shows it
   all as before. Cargo's progress shows while the Rust library compiles.
+- The CLAP, VST3 and Audio Unit SDKs are downloaded once per machine into CPM's source cache
+  (`apf-wrapper/cpm-cache/`), not into every wrapper build folder (wrapper patch 0008). A
+  new plugin's first build downloads only clap-wrapper (5 MB); an older build folder drops
+  its own copy of the SDKs (about 45 MB) after its next build.
 - The README's quick start and the book's "Install and first plugin" chapter go from the
   prerequisites to the plugin in a host, then to a project of your own; build options,
-  install locations and removing a plugin moved to "Hosts and formats".
+  install locations and removing a plugin moved to "Hosts and formats". Both explain what
+  `cargo xtask` is and why a plugin needs it.
 
 ## APF 0.1.0 (2026-10-28)
 

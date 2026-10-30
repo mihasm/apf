@@ -1,0 +1,38 @@
+diff --git a/cmake/base_sdks.cmake b/cmake/base_sdks.cmake
+index afdb0cd..0e8f7c3 100644
+--- a/cmake/base_sdks.cmake
++++ b/cmake/base_sdks.cmake
+@@ -75,9 +75,8 @@ function(guarantee_clap)
+                 GIT_TAG "1.2.10"
+                 EXCLUDE_FROM_ALL TRUE
+                 DOWNLOAD_ONLY TRUE
+-                SOURCE_DIR cpm/clap
+         )
+-        set(CLAP_SDK_ROOT "${CMAKE_CURRENT_BINARY_DIR}/cpm/clap")
++        set(CLAP_SDK_ROOT "${clap_SOURCE_DIR}")
+     else()
+         search_for_sdk_source(SDKDIR clap RESULT CLAP_SDK_ROOT)
+     endif()
+@@ -108,10 +107,9 @@ function(guarantee_vst3sdk)
+                 EXCLUDE_FROM_ALL TRUE
+                 DOWNLOAD_ONLY TRUE
+                 GIT_SUBMODULES base public.sdk pluginterfaces cmake
+-                SOURCE_DIR cpm/vst3sdk
+         )
+ 
+-        set(VST3_SDK_ROOT "${CMAKE_CURRENT_BINARY_DIR}/cpm/vst3sdk")
++        set(VST3_SDK_ROOT "${vst3sdk_SOURCE_DIR}")
+     else()
+         search_for_sdk_source(SDKDIR vst3sdk RESULT VST3_SDK_ROOT)
+     endif()
+@@ -234,9 +232,8 @@ function(guarantee_auv2sdk)
+                 GIT_TAG "AudioUnitSDK-1.1.0"
+                 EXCLUDE_FROM_ALL TRUE
+                 DOWNLOAD_ONLY TRUE
+-                SOURCE_DIR cpm/AudioUnitSDK
+         )
+-        set(AUDIOUNIT_SDK_ROOT "${CMAKE_CURRENT_BINARY_DIR}/cpm/AudioUnitSDK")
++        set(AUDIOUNIT_SDK_ROOT "${AudioUnitSDK_SOURCE_DIR}")
+     else()
+         search_for_sdk_source(SDKDIR AudioUnitSDK RESULT AUDIOUNIT_SDK_ROOT)
+     endif()

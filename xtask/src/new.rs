@@ -152,7 +152,7 @@ codegen-units = 1
         vendor = o.vendor,
     );
     let readme = format!(
-        "# {title}\n\nAn audio plugin made with [APF](https://mihasm.github.io/apf/) (`cargo xtask new {name}`), starting\nfrom its example 01: a sine wave that follows MIDI notes.\n\n```sh\ncargo test                      # plays a note in memory, no sound card\ncargo xtask bundle --install    # builds CLAP, VST3, AUv2 and the app into dist/release/, installs them\n```\n\n`cargo xtask` is APF's build tool, run from `{xtask}` (see `.cargo/config.toml`).\n\nBefore you release, check `[package.metadata.apf]` in `Cargo.toml`: the bundle id and the\nAudio Unit codes are stored in your users' projects and can never change.\n",
+        "# {title}\n\nAn audio plugin made with [APF](https://mihasm.github.io/apf/) (`cargo xtask new {name}`), starting\nfrom its example 01: a sine wave that follows MIDI notes.\n\n```sh\ncargo test                      # plays a note in memory, no sound card\ncargo xtask bundle --install    # builds CLAP, VST3, AUv2 and the app into dist/release/, installs them\n```\n\n`cargo xtask` is APF's build tool: it wraps the plugin into each format, installs it, and more\n(`cargo xtask --help`). `.cargo/config.toml` runs it from APF's repository at `{xtask}`.\n\nBefore you release, check `[package.metadata.apf]` in `Cargo.toml`: the bundle id and the\nAudio Unit codes are stored in your users' projects and can never change.\n",
         name = o.name,
         xtask = rel(""),
     );

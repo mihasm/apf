@@ -2,6 +2,7 @@
 //!
 //!   cargo xtask bundle [<package>] [--project <dir>] [--debug] [--formats clap,vst3,auv2,auv3,standalone|all] [--install] [--verbose]
 //!   cargo xtask install [<package>] [--project <dir>] [--debug] [--formats ...] [--hot]
+//!   cargo xtask uninstall [<package>] [--project <dir>]
 //!   cargo xtask hot [<package>] [--project <dir>] [--debug] [--watch]
 //!   cargo xtask validate [<package>] [--project <dir>] [--debug] [--reaper]
 //!   cargo xtask notices [<package>] [--project <dir>] [--platform macos|windows|linux|all] [--out <file>]
@@ -165,6 +166,7 @@ usage: cargo xtask <command> [<plugin>] [options]
 
   bundle <plugin>      build CLAP, VST3, AUv2 and the standalone app into dist/release/
   install <plugin>     copy the built plugin where hosts find it
+  uninstall <plugin>   remove it from there again, in every format
   hot <plugin>         build the plugin and swap it into hosts running its hot-reload shell
   validate <plugin>    run the validators on the built plugin
   new <name>           start a plugin project of your own, next to this repository
@@ -202,7 +204,7 @@ fn run() -> Result<()> {
     if command == "notices" {
         return notices::run(apf_root, args);
     }
-    if !matches!(command.as_str(), "bundle" | "install" | "hot" | "validate") {
+    if !matches!(command.as_str(), "bundle" | "install" | "uninstall" | "hot" | "validate") {
         return Err(format!("unknown command '{command}'\n\n{HELP}"));
     }
     let mut package = None;
@@ -272,6 +274,7 @@ fn run() -> Result<()> {
             Ok(())
         }
         "install" => install_bundles(&ctx, &plugin, &formats),
+        "uninstall" => uninstall(&plugin),
         "validate" => validate(&ctx, &plugin, reaper),
         _ => Err(usage()),
     }
@@ -600,14 +603,30 @@ fn start_wrapper_build(ctx: &Ctx, build_dir: &Path, title: &str, xcode: bool) ->
             .filter(|(on, _)| *on)
             .map(|(_, word)| *word)
             .collect();
-        println!(
-            "   first {kind}build of this plugin: downloads clap-wrapper and the plugin SDKs (about 50 MB) and compiles them; under a minute on a recent Mac with a fast connection"
-        );
+        // The SDKs come once per machine (CPM's source cache), clap-wrapper once per folder.
+        let what = if ctx.work().join("cpm-cache/vst3sdk").exists() {
+            "downloads clap-wrapper (5 MB) and compiles it with the plugin SDKs"
+        } else {
+            "downloads clap-wrapper and the plugin SDKs (about 50 MB, once per machine) and compiles them"
+        };
+        println!("   first {kind}build of this plugin: {what}; under a minute on a recent Mac with a fast connection");
     }
     fs::create_dir_all(build_dir).map_err(|e| format!("cannot create {}: {e}", build_dir.display()))?;
     let log = build_dir.join("apf-build.log");
     fs::write(&log, "").map_err(|e| format!("{}: {e}", log.display()))?;
     Ok(log)
+}
+
+/// A build folder made before the SDKs moved to CPM's shared source cache (patch 0008) keeps
+/// its own copy of them (about 45 MB); once its build uses the cache, the copy goes.
+fn drop_old_sdk_copy(build_dir: &Path) {
+    let old = build_dir.join("cpm");
+    let cache = fs::read_to_string(build_dir.join("CMakeCache.txt")).unwrap_or_default();
+    let sdks: Vec<&str> =
+        cache.lines().filter(|l| l.starts_with("CPM_PACKAGE_") && l.contains("_SOURCE_DIR:INTERNAL=")).filter_map(|l| l.split('=').nth(1)).collect();
+    if old.is_dir() && !sdks.is_empty() && sdks.iter().all(|sdk| !Path::new(sdk).starts_with(&old)) {
+        let _ = fs::remove_dir_all(&old);
+    }
 }
 
 /// The tools the wrapper build needs, checked before anything is compiled.
@@ -649,6 +668,7 @@ fn bundle(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Result<()> 
     let log = start_wrapper_build(ctx, &dir, &names.join(", "), false)?;
     configure(ctx, plugin, &dir, &main, false, &staticlib, &libs)?;
     run_logged(ctx, cmd("cmake").arg("--build").arg(&dir).args(["--config", build_type, "--target", &format!("{target}_all")]), &log)?;
+    drop_old_sdk_copy(&dir);
     let assets = dir.join("assets");
     if formats.contains(&Format::Auv2) && cfg!(target_os = "macos") {
         restore_auv2_info_plist(&dir, &assets.join(format!("{}.component", plugin.name)), &target)?;
@@ -684,6 +704,7 @@ fn bundle(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Result<()> 
             "--",
             "-quiet",
         ]), &log)?;
+        drop_old_sdk_copy(&xdir);
         // Multi-config generators put products in a folder per configuration.
         let app = xdir.join("assets").join(build_type).join(format!("{} AUv3.app", plugin.name));
         if !app.exists() {
@@ -883,6 +904,68 @@ fn install_bundles(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Re
         let _ = cmd("killall").args(["-9", "AudioComponentRegistrar"]).output();
     }
     println!("== Installed. A host that is running finds it after a plugin rescan or a restart.");
+    Ok(())
+}
+
+/// Remove the plugin from the folders `install` copies it to, in every format (the
+/// hot-reload shell too: it has the plugin's name).
+fn uninstall(plugin: &Plugin) -> Result<()> {
+    let mut installed: Vec<PathBuf> = Vec::new();
+    let mut auv3 = None;
+    if cfg!(windows) {
+        let common = env::var_os("CommonProgramW6432").or_else(|| env::var_os("CommonProgramFiles")).ok_or("CommonProgramFiles is not set")?;
+        for (ext, folder) in [("clap", "CLAP"), ("vst3", "VST3")] {
+            installed.push(PathBuf::from(&common).join(folder).join(format!("{}.{ext}", plugin.name)));
+        }
+    } else if cfg!(target_os = "macos") {
+        let plugins = home()?.join("Library/Audio/Plug-Ins");
+        for (ext, folder) in [("clap", "CLAP"), ("vst3", "VST3"), ("component", "Components")] {
+            installed.push(plugins.join(folder).join(format!("{}.{ext}", plugin.name)));
+        }
+        auv3 = Some(home()?.join("Applications").join(format!("{} AUv3.app", plugin.name)));
+    } else {
+        return Err("uninstall is implemented for macOS and Windows only so far".into());
+    }
+    println!("== Uninstall");
+    let mut removed = 0;
+    // `removed` also counts unregistered AUv3 copies, below.
+    if let Some(app) = auv3.filter(|a| a.exists()) {
+        // Unregister the extension and the app before they go, so hosts stop listing the AUv3.
+        if let Ok(entries) = fs::read_dir(app.join("Contents/PlugIns")) {
+            for appex in entries.flatten() {
+                let _ = output(cmd("pluginkit").arg("-r").arg(appex.path()));
+            }
+        }
+        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+        let _ = output(cmd(lsregister).arg("-u").arg(&app));
+        installed.push(app);
+    }
+    if cfg!(target_os = "macos") {
+        // macOS also registers the AUv3 app that Xcode built (in the wrapper build folder and
+        // dist/), and a host finds the AUv3 there. Unregister every copy.
+        let appex = format!("/{}.appex", plugin.name);
+        let listed = output(cmd("pluginkit").arg("-mv")).unwrap_or_default();
+        for path in listed.lines().filter_map(|l| l.rsplit('\t').next()).filter(|p| p.ends_with(&appex)) {
+            let _ = output(cmd("pluginkit").arg("-r").arg(path));
+            println!("   unregistered {path}");
+            removed += 1;
+        }
+    }
+    for path in installed.iter().filter(|p| p.exists()) {
+        let gone = if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) };
+        gone.map_err(|e| {
+            let hint = if cfg!(windows) { " (the folder needs an elevated shell: sudo cargo xtask uninstall ...)" } else { "" };
+            format!("cannot remove {}: {e}{hint}", path.display())
+        })?;
+        println!("   removed {}", path.display());
+        removed += 1;
+    }
+    if removed == 0 {
+        println!("   {} is not installed", plugin.name);
+    } else if cfg!(target_os = "macos") {
+        // The Audio Unit registry forgets the removed components at once.
+        let _ = cmd("killall").args(["-9", "AudioComponentRegistrar"]).output();
+    }
     Ok(())
 }
 
@@ -1290,12 +1373,25 @@ fn strip_ansi(s: &str) -> String {
     out
 }
 
+/// The VST3 SDK the plugin's wrapper build used: in CPM's shared source cache, as CPM records
+/// it in the build's CMake cache, or in a build folder made before that cache (patch 0008).
+fn vst3_sdk(ctx: &Ctx) -> PathBuf {
+    let dir = ctx.build_dir(false);
+    let cache = fs::read_to_string(dir.join("CMakeCache.txt")).unwrap_or_default();
+    cache
+        .lines()
+        .find_map(|l| l.strip_prefix("CPM_PACKAGE_vst3sdk_SOURCE_DIR:INTERNAL="))
+        .map(PathBuf::from)
+        .filter(|sdk| sdk.join("public.sdk").exists())
+        .unwrap_or_else(|| dir.join("cpm/vst3sdk"))
+}
+
 /// Steinberg's validator, built once from the VST3 SDK the wrapper build downloaded.
 fn vst3_validator(ctx: &Ctx, vst3: &Path) -> Result<String> {
     let work = ctx.work();
     let exe = work.join("vst3-validator/bin/Release").join(format!("validator{}", env::consts::EXE_SUFFIX));
     if !exe.exists() {
-        let sdk = ctx.build_dir(false).join("cpm/vst3sdk");
+        let sdk = vst3_sdk(ctx);
         if !sdk.join("public.sdk/samples/vst-hosting/validator").exists() {
             return Err(format!("no VST3 SDK at {}; run cargo xtask bundle first", sdk.display()));
         }
@@ -1337,7 +1433,7 @@ fn vst3_state_check(ctx: &Ctx, vst3: &Path) -> Result<String> {
     let source = ctx.apf.join("tools/vst3-state-check");
     let same_source = configured("CMAKE_HOME_DIRECTORY:INTERNAL=").is_some_and(|s| canonical(&s).ok() == canonical(&source).ok());
     if !same_source || !configured_sdk.is_some_and(|sdk| sdk.join("public.sdk").exists()) {
-        let sdk = ctx.build_dir(false).join("cpm/vst3sdk");
+        let sdk = vst3_sdk(ctx);
         if !sdk.join("public.sdk/source/vst/hosting").exists() {
             return Err(format!("no VST3 SDK at {}; run cargo xtask bundle first", sdk.display()));
         }

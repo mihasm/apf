@@ -35,16 +35,48 @@ changes: in seconds, without a host.
 cargo xtask bundle example-02-gain --install
 ```
 
-`cargo xtask` is the repository's build tool: a Cargo alias that runs its `xtask` package, so
-there is nothing to install. `bundle` compiles the plugin, then builds the C++ wrapper that
-turns it into each format ([clap-wrapper](https://github.com/free-audio/clap-wrapper)).
-`--install` copies the result to `~/Library/Audio/Plug-Ins/`, where hosts look for plugins.
+### What `cargo xtask` is
 
-The first build of a plugin downloads clap-wrapper and the plugin SDKs (about 50 MB) and
-compiles them. On an M2 with a fast connection that took 20 to 40 seconds; a rebuild after a
-change takes a few seconds. A debug build (`--debug`) and the AUv3 have build folders of their
-own, so their first build costs the same again. The C++ compiler output goes to a log file,
-named if the build fails; `--verbose` shows it as it runs.
+`cargo xtask` is APF's build tool. It is a small Rust program in the repository's `xtask/`
+folder, and `cargo xtask ...` is an alias in `.cargo/config.toml` for
+`cargo run --package xtask -- ...`: Cargo compiles the program the first time and runs it,
+so there is nothing to install. (Keeping a project's build scripts in Rust like this is a
+common Rust convention, called
+[the xtask pattern](https://github.com/matklad/cargo-xtask).)
+
+It exists because Cargo alone cannot make a plugin. Cargo turns your crate into a Rust
+library, but a host loads a *bundle*: a folder in a format's own layout, with its own
+metadata, and for VST3 and Audio Unit with C++ code that translates between the format and
+your plugin. `cargo xtask bundle` does every step:
+
+1. Cargo builds your plugin crate as a static library.
+2. CMake builds the C++ project in `wrapper/`, which links that library into each format with
+   [clap-wrapper](https://github.com/free-audio/clap-wrapper): CLAP, VST3, Audio Unit v2 and a
+   standalone app, and the Audio Unit v3 with Xcode when you ask for it.
+3. The bundles are copied to `dist/release/` and signed for this Mac.
+4. With `--install`, they are copied to `~/Library/Audio/Plug-Ins/`, where hosts look.
+
+Its other commands:
+
+| Command | What it does |
+|---|---|
+| `cargo xtask install <plugin>` | copies what `bundle` built to the plugin folders |
+| `cargo xtask uninstall <plugin>` | removes it from there again |
+| `cargo xtask new <name>` | starts a project of your own (below) |
+| `cargo xtask hot <plugin> --watch` | swaps each saved change into a running host ([Hot reload](hot-reload.md)) |
+| `cargo xtask validate <plugin>` | runs the third-party validators ([Testing](testing.md)) |
+| `cargo xtask --help` | every command and option |
+
+The plugin's name is its package name in `Cargo.toml` (here `example-02-gain`), not the name
+a host shows.
+
+### How long it takes
+
+The first build on a machine downloads the plugin SDKs (about 45 MB). The first build of each
+plugin downloads clap-wrapper (5 MB) and compiles both: 20 to 40 seconds on an M2. A rebuild
+after a change takes a few seconds. A debug build (`--debug`) and the AUv3 have build folders
+of their own, so their first build costs the same again. The C++ compiler output goes to a
+log file, named if the build fails; `--verbose` shows it as it runs.
 
 The plugin files are in `dist/release/`:
 
@@ -79,8 +111,9 @@ cargo xtask bundle --install
 ```
 
 `new` writes a project next to the APF repository, made from example 01 (a sine instrument):
-its own Cargo workspace that depends on `apf` by path, with your names. In its folder,
-`cargo xtask` runs APF's build tool for that project, and the plugin's name can be left out.
+its own Cargo workspace that depends on `apf` by path, with your names. Its own
+`.cargo/config.toml` points `cargo xtask` at APF's `xtask/`, so in its folder `cargo xtask`
+builds that project, and the plugin's name can be left out.
 The plugin files land in `../my-synth/dist/release/`.
 
 Choose the three options now. `--vendor` is the name hosts show. `--id-prefix` makes the

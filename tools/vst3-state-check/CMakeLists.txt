@@ -3,9 +3,9 @@
 #   cmake -S tools/vst3-state-check -B <build> -DVST3_SDK_ROOT=<vst3sdk> -DCMAKE_BUILD_TYPE=Release
 #   cmake --build <build> --config Release
 #
-# VST3_SDK_ROOT is the VST3 SDK (3.8 or later, MIT) the wrapper build downloads:
-# ~/.cargo-target/apf-wrapper/<plugin>-release/cpm/vst3sdk. `cargo xtask validate` builds this
-# tool from there by itself.
+# VST3_SDK_ROOT is the VST3 SDK (3.8 or later, MIT) the wrapper build downloads into CPM's
+# source cache: ~/.cargo-target/apf-wrapper/cpm-cache/vst3sdk/<hash>. `cargo xtask validate`
+# builds this tool from there by itself.
 cmake_minimum_required(VERSION 3.25)
 
 if(NOT DEFINED ENV{MACOSX_DEPLOYMENT_TARGET})

@@ -25,6 +25,7 @@ was true on the date given, not that every later change was checked the same way
 | Resizing in REAPER 7.62: CLAP, VST3 and AU windows resized to 1280, 900, 300 (below the minimum) and 1100 wide: the page follows and keeps its minimum | pass |
 | Resizing in Logic: AUv3 by the page's grip (Logic gives AUv3 windows no edge); the size is kept when the window is reopened | pass |
 | Audio input on an instrument (CLAP, VST3, AUv2, AUv3) and as `aumf`: REAPER renders, `auval` | pass |
+| Effects (examples 02 and 06): `cargo xtask validate` with a test signal on the input of `vst3-state-check` and `au-state-check` (AUv2 build); `--inject-stale` and a session that is not restored are caught | pass (2026-10-30) |
 
 ### Hot reload (2026-10-30; macOS 26.6.2, Logic Pro 12.4)
 
@@ -92,7 +93,7 @@ VST3 SDK that the wrapper build downloads. By hand (any OS, CMake 3.25 or newer)
 
 ```sh
 cmake -S tools/vst3-state-check -B build/vst3-state-check -DCMAKE_BUILD_TYPE=Release \
-      -DVST3_SDK_ROOT=<target dir>/apf-wrapper/demo-synth-release/cpm/vst3sdk
+      -DVST3_SDK_ROOT=<target dir>/apf-wrapper/cpm-cache/vst3sdk/<hash>
 cmake --build build/vst3-state-check --config Release
 build/vst3-state-check/vst3-state-check "dist/release/APF Demo Synth.vst3" [--preset NAME | --preset-program N]
 ```

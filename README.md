@@ -29,9 +29,16 @@ cargo test -p example-02-gain                  # plays audio through the plugin 
 cargo xtask bundle example-02-gain --install   # builds CLAP, VST3, AUv2 and an app, installs them
 ```
 
-The first `bundle` of a plugin downloads clap-wrapper and the plugin SDKs (about 50 MB) and
-compiles them: 20 to 40 seconds on an M2 with a fast connection. Later builds take a few
-seconds.
+**`cargo xtask`** is APF's build tool: a small Rust program in [`xtask/`](xtask) that Cargo
+runs through an alias in [`.cargo/config.toml`](.cargo/config.toml), so there is nothing to
+install. Cargo alone turns the plugin into a Rust library. A host needs more: a bundle for each
+format, made by a C++ wrapper ([clap-wrapper](https://github.com/free-audio/clap-wrapper)),
+signed and copied where hosts look for plugins. `cargo xtask bundle` does that, and
+`cargo xtask --help` lists the other commands.
+
+The first build on a machine downloads the plugin SDKs (about 45 MB). The first build of each
+plugin downloads clap-wrapper (5 MB) and compiles both: 20 to 40 seconds on an M2. Later
+builds take a few seconds.
 
 Then start your host, or rescan its plugins, and put **APF Example 02 Gain** (vendor *Miha
 Smrekar*) on an audio track. It has no window of its own, so the host shows its one
@@ -48,6 +55,8 @@ cd ../my-synth
 cargo xtask bundle --install
 ```
 
+In the new folder, `cargo xtask` runs APF's build tool for your project (through an alias in
+the project's own `.cargo/config.toml`), and the plugin's name can be left out.
 `cargo xtask new` takes `--vendor`, `--id-prefix` and `--manufacturer`. Set them before you
 release: hosts store the plugin's id and Audio Unit codes in every saved project.
 

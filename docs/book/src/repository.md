@@ -44,3 +44,4 @@ The build commands and the packaging settings in a plugin's `Cargo.toml`
 | 0005 | a restored session keeps its parameter values (AUv2 and AUv3) |
 | 0006 | the AUv3 parameter tree follows host automation |
 | 0007 | AUv3: a note struck again legato keeps its key |
+| 0008 | the CLAP, VST3 and Audio Unit SDKs are downloaded once per machine into CPM's source cache, not into every build folder |

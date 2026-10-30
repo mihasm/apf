@@ -11,6 +11,10 @@ page. One crate becomes a plugin in every common format.
   resizing and host automation need no extra code.
   The web view comes from [wry](https://github.com/tauri-apps/wry), the web-view library of
   the [Tauri](https://tauri.app) project (WebKit on macOS, WebView2 on Windows).
+- **Hot reload (macOS):** save a source file and the new build plays in the running host
+  within seconds. The project, the plugin's settings and its window stay open
+  (`cargo xtask hot <plugin> --watch`). Checked in Logic Pro;
+  see the book's [Hot reload](docs/book/src/hot-reload.md) chapter.
 - **Real-time safe:** every example is tested under a counting allocator that fails if
   `process` allocates memory.
 - **MIT:** the framework is MIT licensed and its dependencies are permissively licensed.
@@ -71,6 +75,7 @@ git clone https://github.com/mihasm/apf && cd apf
 cargo test -p example-02-gain                    # plays audio through the plugin, in memory
 cargo xtask bundle example-02-gain               # builds the plugin files into dist/release/
 cargo xtask bundle example-02-gain --install     # also copies them where music programs look
+cargo xtask install example-02-gain --hot        # while developing: new builds swap into the running host
 cargo xtask new my-synth                         # starts a project of your own
 ```
 
@@ -107,6 +112,9 @@ APF is **pre-1.0**: it works, but its API may still change.
 |---|---|---|
 | macOS (Apple silicon) | CLAP, VST3, AUv2, AUv3, standalone | Logic Pro, REAPER |
 | Windows (x64) | CLAP, VST3 | REAPER |
+
+Hot reload works on macOS in every format and is checked in Logic Pro (AUv3). It is not
+available on Windows yet.
 
 Not yet: Linux, LV2, AAX, the Windows standalone. Other hosts may work but are not
 verified. Known problems are in [docs/known-issues.md](docs/known-issues.md), planned work in

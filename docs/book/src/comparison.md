@@ -16,6 +16,8 @@ built in and tested:
 - state: host sessions, factory and user presets, and plugin-defined state saved together, with
   the wrappers' restore bugs fixed and covered by validators;
 - the real-time rule (no allocation in `process`) checked in every example by a counting allocator;
+- hot reload on macOS: a new build swaps into the running host in every format, with its state and
+  window kept, checked in Logic Pro ([Hot reload](hot-reload.md));
 - MIT code and permissively licensed dependencies throughout.
 
 ## What APF lacks
@@ -43,7 +45,7 @@ Said plainly, so you do not find out later:
 | nih-plug | Rust | Web views exist only as third-party experimental crates (for example `httnn/nih-plug-webview`, whose README says work in progress, tested on macOS). |
 | nice-plug | Rust | VST3 and CLAP; GUI adapters for egui and iced (Slint in progress, Vizia third-party). |
 | coupler | Rust | VST3 and CLAP; early in development, little documentation. |
-| truce | Rust | CLAP, VST3, AU v2/v3, AAX, LV2 and VST2 (some opt-in) on macOS, Windows and Linux; built-in widgets, egui, iced, Slint and Vizia. More formats and platforms than APF. |
+| truce | Rust | CLAP, VST3, AU v2/v3, AAX, LV2 and VST2 (some opt-in) on macOS, Windows and Linux; built-in widgets, egui, iced, Slint and Vizia. More formats and platforms than APF. Experimental hot reload of DSP and its built-in GUI (its page, read 2026-10-30). |
 | beamer | Rust | MIT; built around a web UI (`beamer-webview` on WKWebView), AU and VST3; macOS only so far, Windows in progress. |
 | DPF | C++ | Not covered here: not checked for this book. |
 

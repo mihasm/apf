@@ -41,6 +41,10 @@ Unit registry. Then rescan plugins in your host. On Windows see [Windows](window
 Do not leave the standalone app running unattended: it has an open problem
 ([Known issues](known-issues.md)).
 
+While you work on a plugin, you need not quit the host for every build. On macOS,
+`cargo xtask install example-02-gain --hot` installs a version that swaps in each new build
+while the host runs ([Hot reload](hot-reload.md)).
+
 ## Start your own plugin
 
 ```sh

@@ -1178,17 +1178,21 @@ fn vst3_state_check(ctx: &Ctx, vst3: &Path) -> Result<String> {
     let build = ctx.work().join("vst3-state-check");
     let cache = build.join("CMakeCache.txt");
     // The SDK it was configured with lives in one plugin's wrapper build; gone, configure anew.
-    let configured_sdk = fs::read_to_string(&cache).ok().and_then(|t| {
-        t.lines().find_map(|l| l.strip_prefix("VST3_SDK_ROOT:PATH=").map(PathBuf::from))
-    });
-    if !configured_sdk.is_some_and(|sdk| sdk.join("public.sdk").exists()) {
+    let cached = fs::read_to_string(&cache).unwrap_or_default();
+    let configured = |key: &str| cached.lines().find_map(|l| l.strip_prefix(key).map(PathBuf::from));
+    let configured_sdk = configured("VST3_SDK_ROOT:PATH=");
+    // The folder is shared by every checkout of APF on the machine; one configured from
+    // another checkout (perhaps deleted since) compiles that checkout's source.
+    let source = ctx.apf.join("tools/vst3-state-check");
+    let same_source = configured("CMAKE_HOME_DIRECTORY:INTERNAL=").is_some_and(|s| canonical(&s).ok() == canonical(&source).ok());
+    if !same_source || !configured_sdk.is_some_and(|sdk| sdk.join("public.sdk").exists()) {
         let sdk = ctx.build_dir(false).join("cpm/vst3sdk");
         if !sdk.join("public.sdk/source/vst/hosting").exists() {
             return Err(format!("no VST3 SDK at {}; run cargo xtask bundle first", sdk.display()));
         }
         let _ = fs::remove_file(&cache);
         let mut c = cmd("cmake");
-        c.arg("-S").arg(ctx.apf.join("tools/vst3-state-check")).arg("-B").arg(&build);
+        c.arg("-S").arg(&source).arg("-B").arg(&build);
         if use_ninja() {
             c.args(["-G", "Ninja"]);
         }

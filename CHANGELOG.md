@@ -9,10 +9,11 @@ versions.
 
 ### Added
 
-- Hot reload for development: `cargo xtask install <plugin> --hot` installs a shell
+- Hot reload for development (macOS): `cargo xtask install <plugin> --hot` installs a shell
   (`crates/apf-hot`) in every format, and `cargo xtask hot <plugin> [--watch]` builds the
   plugin and swaps it into every running instance in the host. State, the editor and the
-  host's project stay in place (book: Hot reload). `cargo xtask validate --hot` checks the swap
+  host's project stay in place. Checked in Logic Pro 12.4 (AUv3). The book's new Hot reload
+  chapter walks through it with example 10. `cargo xtask validate --hot` checks the swap
   with `apf-host --hot-test` (CLAP) and `scripts/au-hot-check.swift` (AUv2, AUv3).
 - Example 01 has a `Level` parameter, so every example builds and validates like a real
   plugin (clap-validator fails on a plugin with no parameter at all).
@@ -32,6 +33,8 @@ versions.
 
 ### Fixed
 
+- `cargo xtask validate`: `vst3-state-check` is configured again when its shared build folder
+  was configured from another checkout of APF; a deleted checkout made it fail to build.
 - AUv3: a note struck again legato (a note-off and the next note-on of the same key on one
   sample, as a DAW plays two touching notes of one pitch) was released one sample after it
   started when the key had been struck in an earlier render cycle: clap-wrapper's guard against

@@ -26,6 +26,19 @@ was true on the date given, not that every later change was checked the same way
 | Resizing in Logic: AUv3 by the page's grip (Logic gives AUv3 windows no edge); the size is kept when the window is reopened | pass |
 | Audio input on an instrument (CLAP, VST3, AUv2, AUv3) and as `aumf`: REAPER renders, `auval` | pass |
 
+### Hot reload (2026-10-30; macOS 26.6.2, Logic Pro 12.4)
+
+| Check | Result |
+|---|---|
+| Logic Pro 12.4, AUv3, a larger modular synth on APF with its window open, `cargo xtask hot --watch` running: a panel title changed in the Rust source | the watcher built and published in 3.3 s; the open window showed the new title 128 ms later; changed back in 2.4 s and 100 ms; one extension process throughout |
+| `apf-host --hot-test` (CLAP): a held chord, the editor open, a copy of the build published | swapped in 0.2 to 0.3 s while blocks kept playing; the moved parameter kept; the editor open again; sound after the swap |
+| A real DSP change while running: the modular synth's output at half gain (CLAP in `apf-host`, AUv3 out of process); example 10's oscillator fixed to a square wave (CLAP) | heard across the swap: −4.8 to −11.3 dBFS (CLAP), −5.1 to −11.2 dBFS (AUv3); −32.3 to −28.8 dBFS (example 10) |
+| `au-hot-check`: the AUv2 in-process and the installed AUv3 out of process, editor open | swapped while rendering, the parameter kept, sound after; the AUv3 loads the builds through its sandbox exception |
+| `cargo xtask validate --hot`, example 10 and the modular synth: every validator above on the shell bundles, plus the three swap checks | pass |
+
+Not verified for hot reload: VST3 in a host (the shell passes the VST3 validator and the state
+check; its swap runs the same way as the CLAP's), REAPER, Windows and Linux.
+
 Not verified on macOS: a controller's own knobs, wheels and pedal played by hand in Logic;
 Bitwig (remote controls); `mark_dirty` lighting Logic's or REAPER's "changed" mark by a
 controller edit (checked only through the CLAP interface); an `aumf` and an input-taking

@@ -30,8 +30,9 @@ explains each when it first matters.
 1. **Guide.** [Install and first plugin](getting-started.md), then the ideas in the order you
    meet them: [parameters](parameters.md), [audio and MIDI](audio-and-midi.md) (with what is
    [real-time safe](real-time-safe.md)), [the web editor](web-editor.md),
-   [presets and state](presets-and-state.md), [testing](testing.md), and
-   [hosts and formats](hosts-and-formats.md).
+   [presets and state](presets-and-state.md), [testing](testing.md),
+   [hosts and formats](hosts-and-formats.md), and [hot reload](hot-reload.md): new builds
+   swap into a running host while you work.
 2. **The example ladder.** Ten small plugins in the `examples/` folder, one chapter each.
    Each is complete, builds into every format, has a test that renders audio without a sound
    card, and adds one idea to the one before. Read a chapter, open the example, change

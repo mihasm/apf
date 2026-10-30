@@ -59,6 +59,8 @@ sound card.
 **`cargo xtask validate <plugin>`** builds the plugin and runs the third-party validators on
 it: clap-validator, the Steinberg VST3 validator, Apple's `auval` (macOS), and APF's own state
 checks (a restored session must sound the same, in several restore orders). [Validation](validation.md)
-lists the tools and what they found. The run expects a plugin with parameters, and the editor
+lists the tools and what they found. With `--hot` it also checks that the
+[hot-reload](hot-reload.md) shell swaps in a new build in a CLAP host and in both Audio Unit
+versions. The run expects a plugin with parameters, and the editor
 check at least three; a plugin without parameters makes clap-validator 0.4.1 fail its parameter
 test.

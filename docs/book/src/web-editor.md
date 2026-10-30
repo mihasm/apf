@@ -112,6 +112,8 @@ ones you handle.
 
 - Set `APF_UI_DIR=path/to/ui` and the plugin serves the page from disk: edit, reload, no
   rebuild.
+- Inside a host, [hot reload](hot-reload.md) rebuilds and swaps in the whole plugin, page and
+  Rust code together, without closing the host.
 - `apf.log(...)` writes a line to the plugin's stderr, since hosts show no web console.
 - `apf-host --gui-test` opens the editor in a window and drives it end to end, and
   `apf-host --gui 3 --screenshot out.png` writes a picture of it

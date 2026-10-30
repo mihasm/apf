@@ -88,6 +88,9 @@ saves it in sessions and presets, and edits it from a resizable page.
 
 ## Where next
 
+Try [hot reload](hot-reload.md) with this synth: it walks through changing its oscillator
+while it plays in Logic Pro.
+
 Write your own: `cargo xtask new my-plugin` starts from example 01 with fresh identifiers. Keep
 the test that installs the counting allocator, and add the test that pins your parameter ids the
 day you release.

@@ -1,0 +1,19 @@
+[package]
+name = "apf-hot"
+description = "Development shell that runs an APF plugin from a separate library and swaps in each new build while the host keeps running"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[lib]
+# staticlib: linked into every format by the wrapper build in place of the plugin's own
+# library (`cargo xtask install <plugin> --hot`); rlib: for the tests.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+clap-sys.workspace = true

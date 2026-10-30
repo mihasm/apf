@@ -125,6 +125,10 @@ if (TARGET ${APF_TARGET}_auv3 AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # step (post-build commands run in the order they were added), before the host app
     # embeds the extension.
     set(apf_entitlements "${CMAKE_CURRENT_SOURCE_DIR}/auv3.entitlements")
+    if (APF_AUV3_ENTITLEMENTS)
+        # The hot-reload shell's: these plus its publish folder (cargo xtask install --hot).
+        set(apf_entitlements "${APF_AUV3_ENTITLEMENTS}")
+    endif()
     set_target_properties(${APF_TARGET}_auv3 PROPERTIES
             XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${apf_entitlements}")
     add_custom_command(TARGET ${APF_TARGET}_auv3 POST_BUILD

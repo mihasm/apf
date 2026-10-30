@@ -12,6 +12,7 @@
 - [Presets and state](presets-and-state.md)
 - [Testing without a host](testing.md)
 - [Hosts and formats](hosts-and-formats.md)
+- [Hot reload](hot-reload.md)
 
 # The example ladder
 

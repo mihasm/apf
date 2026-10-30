@@ -26,6 +26,7 @@ wrappers had bugs APF carries patches (`wrapper/patches/`) and checks them with 
 cargo xtask bundle <package>                    # CLAP, VST3, AUv2, standalone → dist/release/
 cargo xtask bundle <package> --formats all      # plus AUv3 (macOS, needs Xcode)
 cargo xtask bundle <package> --install          # copy into the plugin folders
+cargo xtask install <package> --hot             # development: swap in new builds while the host runs (see Hot reload)
 cargo xtask validate <package>                  # build, then run every validator
 cargo xtask bundle <package> --project ../mine  # a plugin in its own workspace
 ```

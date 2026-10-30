@@ -9,6 +9,11 @@ versions.
 
 ### Added
 
+- Hot reload for development: `cargo xtask install <plugin> --hot` installs a shell
+  (`crates/apf-hot`) in every format, and `cargo xtask hot <plugin> [--watch]` builds the
+  plugin and swaps it into every running instance in the host. State, the editor and the
+  host's project stay in place (book: Hot reload). `cargo xtask validate --hot` checks the swap
+  with `apf-host --hot-test` (CLAP) and `scripts/au-hot-check.swift` (AUv2, AUv3).
 - Example 01 has a `Level` parameter, so every example builds and validates like a real
   plugin (clap-validator fails on a plugin with no parameter at all).
 - Example 10 is a compact polyphonic synth plugin (eight voices, filter, LFO, wheels, a web

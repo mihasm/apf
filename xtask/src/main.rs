@@ -1,7 +1,8 @@
 //! `cargo xtask` — builds a plugin crate into every format, installs and validates it.
 //!
 //!   cargo xtask bundle <package> [--project <dir>] [--debug] [--formats clap,vst3,auv2,auv3,standalone|all] [--install]
-//!   cargo xtask install <package> [--project <dir>] [--debug] [--formats ...]
+//!   cargo xtask install <package> [--project <dir>] [--debug] [--formats ...] [--hot]
+//!   cargo xtask hot <package> [--project <dir>] [--debug] [--watch]
 //!   cargo xtask validate <package> [--project <dir>] [--debug] [--reaper]
 //!   cargo xtask notices [<package>] [--project <dir>] [--platform macos|windows|linux|all] [--out <file>]
 //!   cargo xtask new <name> [--path <folder>] [--vendor <text>] [--id-prefix <reverse.dns>] [--manufacturer <4 chars>]
@@ -19,6 +20,14 @@
 //! The wrapper builds live in `<target dir>/apf-wrapper/`, one folder per plugin and profile
 //! (the name carries a hash of the folder the plugin is in, so two checkouts or projects
 //! never share one), each with its own copy of clap-wrapper's build.
+//!
+//! `--hot` (with `bundle` or `install`) builds the hot-reload shell (`crates/apf-hot`) into
+//! every format instead of the plugin, in `dist/hot/`, and publishes a first build of the
+//! plugin for it. `hot` builds the plugin as a dynamic library and publishes it: every running
+//! instance of the shell swaps it in, in the host, without closing anything. `--watch` keeps
+//! doing that whenever a source file of the plugin's workspace (or of APF) changes. Builds use
+//! the profile `apf-hot` (release without LTO, incremental), or `dev` with `--debug`.
+//! A plain `install` puts the real plugin back.
 //!
 //! Packaging settings come from `[package.metadata.apf]` in the plugin's Cargo.toml.
 //! `APF_CODESIGN_IDENTITY` selects a signing identity (default: ad-hoc, fine on this Mac).
@@ -98,6 +107,8 @@ struct Ctx {
     /// Names the plugin's wrapper build folders.
     key: String,
     release: bool,
+    /// The hot-reload shell instead of the plugin (`--hot`, and the `hot` command).
+    hot: bool,
 }
 
 impl Ctx {
@@ -108,7 +119,11 @@ impl Ctx {
         self.target_dir.join("apf-wrapper")
     }
     fn dist(&self) -> PathBuf {
-        self.out.join("dist").join(self.profile())
+        self.out.join("dist").join(if self.hot { "hot" } else { self.profile() })
+    }
+    /// Where `hot` publishes the plugin's builds for the shell.
+    fn hot_dir(&self) -> PathBuf {
+        self.target_dir.join("apf-hot").join(&self.key)
     }
     /// The wrapper build folder of this plugin (`xcode`: the AUv3's).
     fn build_dir(&self, xcode: bool) -> PathBuf {
@@ -136,7 +151,7 @@ fn main() -> ExitCode {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask <bundle|install|validate> <package> [--project <dir>] [--debug] [--formats clap,vst3,auv2,auv3,standalone] [--install] [--reaper]\n       cargo xtask new <name> [--path <folder>] [--vendor <text>] [--id-prefix <reverse.dns>] [--manufacturer <4 chars>]\n       cargo xtask notices [<package>] [--project <dir>] [--platform macos|windows|linux|all] [--out <file>]"
+    "usage: cargo xtask <bundle|install|validate> <package> [--project <dir>] [--debug] [--formats clap,vst3,auv2,auv3,standalone] [--install] [--reaper] [--hot]\n       cargo xtask hot <package> [--project <dir>] [--debug] [--watch]\n       cargo xtask new <name> [--path <folder>] [--vendor <text>] [--id-prefix <reverse.dns>] [--manufacturer <4 chars>]\n       cargo xtask notices [<package>] [--project <dir>] [--platform macos|windows|linux|all] [--out <file>]"
         .into()
 }
 
@@ -155,6 +170,8 @@ fn run() -> Result<()> {
     let mut release = true;
     let mut install = false;
     let mut reaper = false;
+    let mut hot = command == "hot";
+    let mut watch = false;
     let mut project = None;
     let mut formats = Format::defaults();
     while let Some(arg) = args.next() {
@@ -164,6 +181,8 @@ fn run() -> Result<()> {
             "--release" => release = true,
             "--install" => install = true,
             "--reaper" => reaper = true,
+            "--hot" => hot = true,
+            "--watch" => watch = true,
             "--formats" => {
                 let list = args.next().ok_or("--formats needs a list")?;
                 formats = if list == "all" {
@@ -185,8 +204,22 @@ fn run() -> Result<()> {
         }
     }
     let package = package.ok_or_else(usage)?;
-    let (ctx, plugin) = load(&package, project.as_deref(), release)?;
+    if command == "hot" {
+        // The shell is always a release build; --debug is about the plugin's builds.
+        let (ctx, plugin) = load(&package, project.as_deref(), true, true)?;
+        return if watch { hot_watch(&ctx, &plugin, !release) } else { publish(&ctx, &plugin, !release).map(|_| ()) };
+    }
+    let (ctx, plugin) = load(&package, project.as_deref(), release || hot, hot)?;
     match command.as_str() {
+        // The shell is built before it is installed, and gets a first build of the plugin.
+        "bundle" | "install" if hot => {
+            bundle(&ctx, &plugin, &formats)?;
+            if command == "install" || install {
+                publish(&ctx, &plugin, !release)?;
+                install_bundles(&ctx, &plugin, &formats)?;
+            }
+            Ok(())
+        }
         "bundle" => {
             bundle(&ctx, &plugin, &formats)?;
             if install {
@@ -225,7 +258,7 @@ fn hash(text: &str) -> u64 {
     text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
 }
 
-fn load(package: &str, project: Option<&Path>, release: bool) -> Result<(Ctx, Plugin)> {
+fn load(package: &str, project: Option<&Path>, release: bool, hot: bool) -> Result<(Ctx, Plugin)> {
     // xtask is a member of this repository's workspace; the wrapper project is next to it.
     let apf_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().ok_or("xtask has no parent folder")?.to_path_buf();
     let project = match project {
@@ -307,14 +340,25 @@ fn load(package: &str, project: Option<&Path>, release: bool) -> Result<(Ctx, Pl
         // clone, a worktree) from reusing this one's CMake cache, which is tied to its source folder.
         None => (apf_root.clone(), None, format!("{package}-{:08x}", hash(&apf_root.to_string_lossy()) as u32)),
     };
-    Ok((Ctx { apf: apf_root, root, manifest, out, target_dir, key, release }, plugin))
+    // The shell's wrapper builds are folders of their own, so switching between the shell and
+    // the plugin never relinks the other's.
+    let key = if hot { format!("{key}-hot") } else { key };
+    Ok((Ctx { apf: apf_root, root, manifest, out, target_dir, key, release, hot }, plugin))
 }
 
-/// Build the Rust static library; returns its path and the native libraries it needs.
+/// Build the Rust static library; returns its path and the native libraries it needs. With
+/// `--hot` it is the shell's, which knows where the plugin's builds are published.
 fn build_rust(ctx: &Ctx, plugin: &Plugin) -> Result<(PathBuf, Vec<String>)> {
-    println!("== Rust: {} ({}, {})", plugin.package, ctx.profile(), ctx.root.display());
-    let mut c = ctx.cargo("rustc");
-    c.args(["--package", &plugin.package, "--lib", "--crate-type", "staticlib"]);
+    let (package, lib_name) = if ctx.hot { ("apf-hot", "apf_hot") } else { (plugin.package.as_str(), plugin.lib_name.as_str()) };
+    println!("== Rust: {package} ({}, {})", ctx.profile(), if ctx.hot { ctx.apf.display() } else { ctx.root.display() });
+    let mut c = if ctx.hot {
+        let mut c = cmd("cargo");
+        c.arg("rustc").current_dir(&ctx.apf).env("APF_HOT_DIR", ctx.hot_dir());
+        c
+    } else {
+        ctx.cargo("rustc")
+    };
+    c.args(["--package", package, "--lib", "--crate-type", "staticlib"]);
     if ctx.release {
         c.arg("--release");
     }
@@ -355,7 +399,7 @@ fn build_rust(ctx: &Ctx, plugin: &Plugin) -> Result<(PathBuf, Vec<String>)> {
         }
     }
     // MSVC names a static library `<name>.lib`, the other toolchains `lib<name>.a`.
-    let file = if cfg!(target_env = "msvc") { format!("{}.lib", plugin.lib_name) } else { format!("lib{}.a", plugin.lib_name) };
+    let file = if cfg!(target_env = "msvc") { format!("{lib_name}.lib") } else { format!("lib{lib_name}.a") };
     let built = ctx.target_dir.join(ctx.profile()).join(&file);
     if !built.exists() {
         return Err(format!("{} was not built", built.display()));
@@ -424,6 +468,9 @@ fn configure(ctx: &Ctx, plugin: &Plugin, build_dir: &Path, formats: &[&str], xco
         .arg(format!("-DAPF_AU_MANUFACTURER={}", plugin.au_manufacturer))
         .arg(format!("-DAPF_AU_MANUFACTURER_NAME={}", plugin.au_manufacturer_name))
         .arg(format!("-DAPF_ASSET_DIR={}", build_dir.join("assets").display()));
+    if xcode && ctx.hot {
+        c.arg(format!("-DAPF_AUV3_ENTITLEMENTS={}", hot_entitlements(ctx, build_dir)?.display()));
+    }
     if cfg!(target_os = "macos") {
         c.arg(format!("-DCMAKE_OSX_ARCHITECTURES={}", std::env::consts::ARCH.replace("aarch64", "arm64")));
     }
@@ -689,6 +736,213 @@ fn install_bundles(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Re
 }
 
 // ---------------------------------------------------------------------------------------------
+// Hot reload
+
+/// How many published builds stay in the publish folder; older ones are deleted (a process
+/// that loaded one keeps it mapped all the same).
+const HOT_KEEP: usize = 12;
+
+/// Build the plugin as a dynamic library and publish it for the hot-reload shell; returns
+/// the published file, or `None` when the build is the same as the one published last (a
+/// reload would only cost the notes that are held). `debug`: the `dev` profile instead of
+/// `apf-hot`.
+fn publish(ctx: &Ctx, plugin: &Plugin, debug: bool) -> Result<Option<PathBuf>> {
+    if !cfg!(unix) {
+        return Err("hot reload is implemented for macOS and Linux only so far".into());
+    }
+    let profile = if debug { "dev" } else { "apf-hot" };
+    println!("== Hot build: {} ({profile})", plugin.package);
+    let start = std::time::Instant::now();
+    let mut c = ctx.cargo("rustc");
+    c.args(["--package", &plugin.package, "--lib", "--crate-type", "cdylib", "--profile", profile]);
+    if !debug {
+        // Release code without the slow parts of a release build: LTO and a single codegen
+        // unit. Defined here, so a plugin's workspace needs nothing for it.
+        for setting in [
+            "profile.apf-hot.inherits=\"release\"",
+            "profile.apf-hot.lto=false",
+            "profile.apf-hot.codegen-units=16",
+            "profile.apf-hot.incremental=true",
+        ] {
+            c.args(["--config", setting]);
+        }
+    }
+    if cfg!(target_os = "macos") {
+        c.env("MACOSX_DEPLOYMENT_TARGET", "11.0");
+    }
+    run_cmd(&mut c)?;
+    let ext = if cfg!(target_os = "macos") { "dylib" } else { "so" };
+    let built = ctx.target_dir.join(if debug { "debug" } else { profile }).join(format!("lib{}.{ext}", plugin.lib_name));
+    if !built.exists() {
+        return Err(format!("{} was not built", built.display()));
+    }
+    let dir = ctx.hot_dir();
+    fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    let bytes = fs::read(&built).map_err(|e| format!("{}: {e}", built.display()))?;
+    let fingerprint = match macho_uuid(&bytes) {
+        // The linker's hash of the code; the bytes also hold object files' timestamps.
+        Some(uuid) => uuid.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+        None => format!("{:016x} {}", bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3)), bytes.len()),
+    };
+    let last = dir.join("current.built");
+    let current_exists = fs::read_to_string(dir.join("current")).is_ok_and(|n| dir.join(n.trim()).exists());
+    if current_exists && fs::read_to_string(&last).ok().as_deref() == Some(fingerprint.as_str()) {
+        println!("== Unchanged since the last published build: nothing to reload");
+        return Ok(None);
+    }
+    // A new name for every build: a process never loads a library twice from one path.
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis();
+    let name = format!("lib{}-{stamp}.{ext}", plugin.lib_name);
+    let dst = dir.join(&name);
+    fs::copy(&built, &dst).map_err(|e| format!("cannot copy {} to {}: {e}", built.display(), dst.display()))?;
+    if cfg!(target_os = "macos") {
+        // Its own install name too, so dyld can never take it for an earlier build.
+        output(cmd("install_name_tool").arg("-id").arg(format!("@rpath/{name}")).arg(&dst))?;
+        output(cmd("codesign").args(["--force", "--sign", "-", "--timestamp=none"]).arg(&dst))?;
+    }
+    // `current` names the newest build; replaced in one step, so a shell never reads half.
+    let tmp = dir.join("current.tmp");
+    fs::write(&tmp, &name).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, dir.join("current")).map_err(|e| e.to_string())?;
+    fs::write(&last, &fingerprint).map_err(|e| e.to_string())?;
+    let mut builds: Vec<String> = fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(&format!("lib{}-", plugin.lib_name)) && n.ends_with(ext))
+        .collect();
+    builds.sort();
+    for old in builds.iter().rev().skip(HOT_KEEP) {
+        let _ = fs::remove_file(dir.join(old));
+    }
+    println!("== Published {name} in {:.1} s → {}", start.elapsed().as_secs_f64(), dir.display());
+    Ok(Some(dst))
+}
+
+/// The `LC_UUID` of a 64-bit Mach-O file.
+fn macho_uuid(bytes: &[u8]) -> Option<[u8; 16]> {
+    let u32_at = |i: usize| bytes.get(i..i + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    if u32_at(0)? != 0xfeed_facf {
+        return None;
+    }
+    let (count, mut at) = (u32_at(16)?, 32usize);
+    for _ in 0..count {
+        let (cmd, size) = (u32_at(at)?, u32_at(at + 4)? as usize);
+        if cmd == 0x1b {
+            return bytes.get(at + 8..at + 24)?.try_into().ok();
+        }
+        at += size.max(8);
+    }
+    None
+}
+
+/// `hot --watch`: publish a build whenever a source file changes, until stopped (Ctrl+C).
+fn hot_watch(ctx: &Ctx, plugin: &Plugin, debug: bool) -> Result<()> {
+    // The packages the plugin is built from that live in a folder (not a registry): its own
+    // crates and APF by path; the other members of its workspace are left alone.
+    let mut c = ctx.cargo("metadata");
+    c.args(["--format-version", "1"]);
+    let meta: Value = serde_json::from_str(&output(&mut c)?).map_err(|e| format!("cargo metadata: {e}"))?;
+    let packages = meta["packages"].as_array().cloned().unwrap_or_default();
+    let nodes = meta["resolve"]["nodes"].as_array().cloned().unwrap_or_default();
+    let start = packages
+        .iter()
+        .find(|p| p["name"] == plugin.package.as_str() && p["source"].is_null())
+        .and_then(|p| p["id"].as_str())
+        .ok_or_else(|| format!("{} is not in the metadata", plugin.package))?
+        .to_owned();
+    let (mut seen, mut todo) = (BTreeSet::new(), vec![start]);
+    while let Some(id) = todo.pop() {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        if let Some(node) = nodes.iter().find(|n| n["id"] == id.as_str()) {
+            for dep in node["deps"].as_array().into_iter().flatten() {
+                // Only what the library links, not its build or dev dependencies' own trees.
+                let normal = dep["dep_kinds"].as_array().is_none_or(|k| k.iter().any(|k| k["kind"].is_null() || k["kind"] == "build"));
+                if let (true, Some(pkg)) = (normal, dep["pkg"].as_str()) {
+                    todo.push(pkg.to_owned());
+                }
+            }
+        }
+    }
+    let mut roots: Vec<PathBuf> = packages
+        .iter()
+        .filter(|p| p["source"].is_null() && p["id"].as_str().is_some_and(|id| seen.contains(id)))
+        .filter_map(|p| p["manifest_path"].as_str().and_then(|m| Path::new(m).parent()).map(Path::to_path_buf))
+        .collect();
+    roots.sort();
+    // A package folder inside another is watched with it.
+    roots.dedup_by(|b, a| b.starts_with(a));
+    println!("== Watching {} folder(s) for changes (Ctrl+C stops):", roots.len());
+    for r in &roots {
+        println!("   {}", r.display());
+    }
+    if let Err(e) = publish(ctx, plugin, debug) {
+        println!("== Hot build failed: {e}");
+    }
+    let mut last = sources_stamp(&roots);
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let now = sources_stamp(&roots);
+        if now == last {
+            continue;
+        }
+        // Let an editor finish saving several files.
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        last = sources_stamp(&roots);
+        if let Err(e) = publish(ctx, plugin, debug) {
+            println!("== Hot build failed (the running build stays): {e}");
+        }
+        // Changes made during the build are caught on the next round.
+    }
+}
+
+/// The newest modification time and the number of the source files under `roots`.
+fn sources_stamp(roots: &[PathBuf]) -> (std::time::SystemTime, usize) {
+    fn walk(dir: &Path, newest: &mut std::time::SystemTime, count: &mut usize) {
+        let Ok(entries) = fs::read_dir(dir) else { return };
+        for e in entries.flatten() {
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with('.') || matches!(name.as_ref(), "target" | "dist" | "node_modules") {
+                continue;
+            }
+            let Ok(meta) = e.metadata() else { continue };
+            if meta.is_dir() {
+                walk(&e.path(), newest, count);
+            } else {
+                *count += 1;
+                if let Ok(m) = meta.modified() {
+                    *newest = (*newest).max(m);
+                }
+            }
+        }
+    }
+    let (mut newest, mut count) = (std::time::UNIX_EPOCH, 0);
+    for r in roots {
+        walk(r, &mut newest, &mut count);
+    }
+    (newest, count)
+}
+
+/// The AUv3's entitlements with the publish folder opened in its sandbox, so the shell in
+/// the extension can load the plugin's builds and write its log there.
+fn hot_entitlements(ctx: &Ctx, build_dir: &Path) -> Result<PathBuf> {
+    let base = ctx.apf.join("wrapper/auv3.entitlements");
+    let text = fs::read_to_string(&base).map_err(|e| format!("{}: {e}", base.display()))?;
+    let extra = format!(
+        "    <!-- Hot-reload shell only: the folder the plugin's builds are published to. -->\n    <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>\n    <array>\n        <string>{}/</string>\n    </array>\n</dict>",
+        ctx.hot_dir().display()
+    );
+    let i = text.rfind("</dict>").ok_or_else(|| format!("{} has no </dict>", base.display()))?;
+    let out = build_dir.join("auv3-hot.entitlements");
+    fs::create_dir_all(build_dir).map_err(|e| e.to_string())?;
+    fs::write(&out, format!("{}{extra}{}", &text[..i], &text[i + "</dict>".len()..])).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+// ---------------------------------------------------------------------------------------------
 
 /// Run every validator that applies; reports each result and fails if any failed.
 /// `reaper`: also load the installed formats in REAPER (it starts and quits its own instance).
@@ -748,6 +1002,34 @@ fn validate(ctx: &Ctx, plugin: &Plugin, reaper: bool) -> Result<()> {
             }
         }
     }
+    if ctx.hot {
+        // The shell swaps a newly published build in while the host renders, with the editor
+        // open: the CLAP in apf-host, the AUv2 build in this process and the installed AUv3
+        // (out of process, as Logic loads it) when it is the shell.
+        let dir = ctx.hot_dir();
+        report("hot reload (CLAP)", hot_host_check(ctx, &clap, &dir));
+        if cfg!(target_os = "macos") {
+            let dir = dir.to_string_lossy().into_owned();
+            let component = dist.join(format!("{}.component", plugin.name));
+            if component.exists() {
+                report(
+                    "au-hot-check (AUv2 build)",
+                    swift_check(ctx, "au-hot-check", &[&plugin.au_type, "HChk", &plugin.au_manufacturer, "--in-process", "--bundle", &component.to_string_lossy(), "--hot-dir", &dir, "--editor"]),
+                );
+            }
+            let appex = |app: &Path| app.join(format!("Contents/PlugIns/{}.appex/Contents/MacOS/{}", plugin.name, plugin.name));
+            let built_auv3 = dist.join(format!("{} AUv3.app", plugin.name));
+            let installed_auv3 = home()?.join("Applications").join(format!("{} AUv3.app", plugin.name));
+            if fs::read(appex(&built_auv3)).ok().is_some_and(|b| fs::read(appex(&installed_auv3)).ok() == Some(b)) {
+                report(
+                    "au-hot-check (AUv3)",
+                    swift_check(ctx, "au-hot-check", &[&plugin.au_type, &plugin.au_v3_subtype, &plugin.au_manufacturer, "--hot-dir", &dir, "--editor"]),
+                );
+            } else {
+                println!("== au-hot-check (AUv3): skipped, the installed AUv3 is not this shell (cargo xtask install --hot --formats all)");
+            }
+        }
+    }
     if reaper {
         let script = ctx.apf.join("scripts/reaper-render-test.sh");
         let out = ctx.work().join("reaper-test");
@@ -779,6 +1061,16 @@ fn apf_host(ctx: &Ctx, clap: &Path) -> Result<String> {
         return Ok(format!("{} | editor: none, nothing to drive", pick("render:", "")));
     }
     Ok(format!("{} | editor: {}{resized}", pick("render:", ""), pick("gui-test:", "ok after")))
+}
+
+/// `apf-host --hot-test`: the shell's CLAP swaps in a newly published build.
+fn hot_host_check(ctx: &Ctx, clap: &Path, dir: &Path) -> Result<String> {
+    output(cmd("cargo").current_dir(&ctx.apf).args(["build", "--quiet", "--release", "--package", "apf-host"]))?;
+    let meta = output(cmd("cargo").current_dir(&ctx.apf).args(["metadata", "--format-version", "1", "--no-deps"]))?;
+    let meta: Value = serde_json::from_str(&meta).map_err(|e| format!("cargo metadata: {e}"))?;
+    let exe = PathBuf::from(meta["target_directory"].as_str().ok_or("no target_directory")?).join("release").join(format!("apf-host{}", env::consts::EXE_SUFFIX));
+    let text = output(cmd(&exe).arg(clap).arg("--hot-test").arg(dir))?;
+    Ok(text.lines().filter_map(|l| l.strip_prefix("hot-test:")).filter(|l| !l.contains("published")).map(str::trim).collect::<Vec<_>>().join("; "))
 }
 
 fn clap_validator(clap: &Path) -> Result<String> {

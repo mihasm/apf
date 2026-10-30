@@ -5,6 +5,7 @@
 | `crates/apf` | core: plugin API, parameters, queue, state, CLAP backend |
 | `crates/apf-webview` | web editor (wry) and the `apf.js` bridge |
 | `crates/apf-host` | a minimal CLAP host for tests: renders audio and drives the editor end to end |
+| `crates/apf-hot` | the hot-reload shell: runs a plugin from a published dynamic library and swaps in new builds |
 | `crates/apf-test` | test a plugin through the CLAP interface in memory, with the counting allocator |
 | `examples/01-sine` to `09-midi-and-learn` | the example ladder; `10-synth` is a guide to `demo-synth` |
 | `examples/demo-synth` | 16-voice synth: sine, saw and square (PolyBLEP), resonant state-variable low-pass, ADSR, sustain pedal, pitch bend, mod wheel (cutoff, vibrato, resonance, gain), factory presets, web editor |

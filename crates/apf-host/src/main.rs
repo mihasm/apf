@@ -2,6 +2,7 @@
 //! DAW would) and checks it without any DAW:
 //!
 //!   apf-host <plugin.clap> [--render out.wav] [--gui-test] [--gui SECONDS] [--screenshot out.png] [--parent-in-window]
+//!   apf-host <hot-shell.clap> --hot-test <publish folder>
 //!
 //! * always: scans the plugin, lists its parameters, renders two seconds of a chord and
 //!   reports level and validity of the output (optionally written to a WAV file);
@@ -14,6 +15,12 @@
 //!   Windows);
 //! * `--parent-in-window`: give the editor a view that is in the window already (REAPER's
 //!   CLAP and VST3 hosts) instead of one put there afterwards (Logic and other AU hosts).
+//! * `--hot-test <folder>`: the plugin is the hot-reload shell (`cargo xtask bundle --hot`)
+//!   and `<folder>` its publish folder: plays a held chord with the editor open, publishes a
+//!   copy of the current build as a new one, and checks that the shell swaps it in while
+//!   blocks keep coming — the parameter set before kept, the editor open again, sound after.
+//!   With `--hot-wait SECONDS` it publishes nothing and waits that long for a build published
+//!   from outside (`cargo xtask hot`), to compare the sound of two different builds.
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::path::{Path, PathBuf};
@@ -41,6 +48,8 @@ type Result<T> = std::result::Result<T, String>;
 // --- host callbacks ----------------------------------------------------------------------------
 
 static FLUSH_REQUESTS: AtomicUsize = AtomicUsize::new(0);
+/// The plugin asked for `on_main_thread` (`--hot-test` answers it; the other tests do not).
+static CALLBACK_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 unsafe extern "C" fn host_get_extension(_h: *const clap_host, id: *const c_char) -> *const c_void {
@@ -71,6 +80,9 @@ unsafe extern "C" fn host_request_flush(_h: *const clap_host) {
     FLUSH_REQUESTS.fetch_add(1, Ordering::Relaxed);
 }
 unsafe extern "C" fn host_noop(_h: *const clap_host) {}
+unsafe extern "C" fn host_request_callback(_h: *const clap_host) {
+    CALLBACK_REQUESTED.store(true, Ordering::SeqCst);
+}
 unsafe extern "C" fn host_true(_h: *const clap_host) -> bool {
     true
 }
@@ -100,7 +112,7 @@ fn host() -> &'static clap_host {
         get_extension: Some(host_get_extension),
         request_restart: Some(host_noop),
         request_process: Some(host_noop),
-        request_callback: Some(host_noop),
+        request_callback: Some(host_request_callback),
     }))
 }
 
@@ -1752,6 +1764,160 @@ unsafe fn gui_run(_: &Loaded, _: Option<f64>, _: bool, _: Option<&Path>, _: bool
     Err("the GUI test is implemented for macOS and Windows only so far".into())
 }
 
+// --- hot reload --------------------------------------------------------------------------------
+
+/// Publish a copy of the shell's current build under a new name, as `cargo xtask hot` does.
+fn republish(dir: &Path) -> Result<String> {
+    let current = std::fs::read_to_string(dir.join("current")).map_err(|e| format!("{}: {e}", dir.join("current").display()))?;
+    let current = current.trim();
+    let (stem, ext) = current.rsplit_once('.').ok_or("the current build has no extension")?;
+    // A copy of a copy is named after the original build.
+    let stem = stem.split("-hot-test").next().unwrap_or(stem).split("-au-hot-check").next().unwrap_or(stem);
+    let name = format!("{stem}-hot-test-{}.{ext}", std::process::id());
+    let dst = dir.join(&name);
+    std::fs::copy(dir.join(current), &dst).map_err(|e| e.to_string())?;
+    if cfg!(target_os = "macos") {
+        for (tool, args) in [("install_name_tool", vec!["-id".to_string(), format!("@rpath/{name}")]), ("codesign", vec!["--force".into(), "--sign".into(), "-".into()])] {
+            // Captured: install_name_tool warns that the signature, made again next, is gone.
+            let out = std::process::Command::new(tool).args(&args).arg(&dst).output().map_err(|e| format!("{tool}: {e}"))?;
+            if !out.status.success() {
+                return Err(format!("{tool} failed on {}: {}", dst.display(), String::from_utf8_lossy(&out.stderr)));
+            }
+        }
+    }
+    std::fs::write(dir.join("current.tmp"), &name).map_err(|e| e.to_string())?;
+    std::fs::rename(dir.join("current.tmp"), dir.join("current")).map_err(|e| e.to_string())?;
+    Ok(name)
+}
+
+#[cfg(unix)]
+unsafe fn hot_test(loaded: &Loaded, dir: &Path, wait: Option<f64>) -> Result<()> {
+    let plugin = loaded.plugin;
+    let params = loaded.param_infos();
+    let probe = params.iter().find(|p| p.max > p.min).ok_or("the plugin has no parameter to keep across the reload")?.clone();
+    // A value the reload must keep: the end of the range farther from the default.
+    let default = loaded.value(probe.id);
+    let asked = if (default - probe.min).abs() > (default - probe.max).abs() { probe.min } else { probe.max };
+    loaded.flush(&vec![param_value(probe.id, asked)]);
+    // What it took (a stepped parameter rounds).
+    let kept = loaded.value(probe.id);
+    if kept == default {
+        return Err(format!("{} did not move from its default", probe.name));
+    }
+
+    let (sr, block) = (48000.0, 256usize);
+    let outs = loaded.ports(false) as usize;
+    let ins = loaded.ports(true) as usize;
+    if !((*plugin).activate.unwrap())(plugin, sr, 1, block as u32) || !((*plugin).start_processing.unwrap())(plugin) {
+        return Err("activate failed".into());
+    }
+    #[cfg(target_os = "macos")]
+    let window = match loaded.gui {
+        Some(_) => Some(gui::open(loaded, "apf-host hot test", false)?),
+        None => None,
+    };
+    #[cfg(target_os = "macos")]
+    let view_before = window.as_ref().and_then(|w| w.view.subviews().firstObject()).map(|v| objc2::rc::Retained::as_ptr(&v) as usize);
+
+    let mut out_bufs = vec![vec![0f32; block]; outs];
+    let mut in_bufs = vec![vec![0f32; block]; ins.max(1)];
+    let mut out_events = Vec::new();
+    let mut pos = 0usize;
+    // One block; returns its peak.
+    let mut run = |events: Vec<AnyEvent>| -> f32 {
+        let mut out_ptrs: Vec<*mut f32> = out_bufs.iter_mut().map(|b| b.as_mut_ptr()).collect();
+        let mut in_ptrs: Vec<*mut f32> = in_bufs.iter_mut().map(|b| b.as_mut_ptr()).collect();
+        let mut out_buf = clap_audio_buffer { data32: out_ptrs.as_mut_ptr(), data64: ptr::null_mut(), channel_count: outs as u32, latency: 0, constant_mask: 0 };
+        let in_buf = clap_audio_buffer { data32: in_ptrs.as_mut_ptr(), data64: ptr::null_mut(), channel_count: ins as u32, latency: 0, constant_mask: 0 };
+        let in_list = input_list(&events);
+        let out_list = output_list(&mut out_events);
+        let process = clap_process {
+            steady_time: pos as i64,
+            frames_count: block as u32,
+            transport: ptr::null(),
+            audio_inputs: if ins > 0 { &in_buf } else { ptr::null() },
+            audio_outputs: &mut out_buf,
+            audio_inputs_count: (ins > 0) as u32,
+            audio_outputs_count: 1,
+            in_events: &in_list,
+            out_events: &out_list,
+        };
+        ((*plugin).process.unwrap())(plugin, &process);
+        pos += block;
+        out_bufs.iter().flatten().fold(0f32, |m, s| if s.is_finite() { m.max(s.abs()) } else { f32::INFINITY })
+    };
+    let chord = |kind: u16| [60i16, 64, 67].into_iter().map(|k| note(kind, 0, k)).collect::<Vec<_>>();
+    let mut before = 0f32;
+    for i in 0..40 {
+        before = before.max(run(if i == 0 { chord(CLAP_EVENT_NOTE_ON) } else { Vec::new() }));
+    }
+    let name = match wait {
+        Some(_) => {
+            println!("hot-test:   waiting for a build to be published");
+            String::new()
+        }
+        None => republish(dir)?,
+    };
+    if wait.is_none() {
+        println!("hot-test:   published {name}");
+    }
+    let limit = Duration::from_secs_f64(wait.unwrap_or(5.0));
+    let start = Instant::now();
+    let reloaded = |log: &Vec<String>| log.iter().any(|l| l.contains("reloaded") && l.contains(&name));
+    let mut blocks = 0;
+    while !reloaded(&LOG.lock().unwrap()) {
+        if start.elapsed() > limit {
+            return Err(format!("no reload within {} s; the plugin's log: {:?}", limit.as_secs_f64(), LOG.lock().unwrap()));
+        }
+        // The host's two threads in turn: audio blocks, and the main thread's callback.
+        run(Vec::new());
+        blocks += 1;
+        #[cfg(target_os = "macos")]
+        gui::pump(Duration::from_millis(5));
+        #[cfg(not(target_os = "macos"))]
+        std::thread::sleep(Duration::from_millis(5));
+        if CALLBACK_REQUESTED.swap(false, Ordering::SeqCst) {
+            ((*plugin).on_main_thread.unwrap())(plugin);
+        }
+    }
+    println!("hot-test:   reloaded {} ms after publishing, {blocks} blocks played meanwhile", start.elapsed().as_millis());
+    let value = loaded.value(probe.id);
+    println!("hot-test:   {} kept: {} (set before the reload: {})", probe.name, loaded.text(probe.id, value), loaded.text(probe.id, kept));
+    if (value - kept).abs() > 1e-6 * (probe.max - probe.min).max(1.0) {
+        return Err(format!("{} is {value} after the reload, not {kept}", probe.name));
+    }
+    let mut after = 0f32;
+    for i in 0..40 {
+        let mut events = if i == 0 { chord(CLAP_EVENT_NOTE_OFF) } else { Vec::new() };
+        if i == 1 {
+            events = chord(CLAP_EVENT_NOTE_ON);
+        }
+        after = after.max(run(events));
+    }
+    println!("hot-test:   peak before {:.1} dBFS, after {:.1} dBFS", 20.0 * before.max(1e-9).log10(), 20.0 * after.max(1e-9).log10());
+    if !after.is_finite() || after < 1e-4 {
+        return Err("no sound from the reloaded build".into());
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(w) = window {
+        gui::pump(Duration::from_millis(300));
+        let view_after = w.view.subviews().firstObject().map(|v| objc2::rc::Retained::as_ptr(&v) as usize);
+        println!("hot-test:   editor views in the host's view after the reload: {}", w.view.subviews().len());
+        if view_after.is_none() || view_after == view_before {
+            return Err("the editor was not opened again in the host's view".into());
+        }
+        gui::close(loaded, w);
+    }
+    ((*plugin).stop_processing.unwrap())(plugin);
+    ((*plugin).deactivate.unwrap())(plugin);
+    Ok(())
+}
+
+#[cfg(not(unix))]
+unsafe fn hot_test(_: &Loaded, _: &Path, _: Option<f64>) -> Result<()> {
+    Err("hot reload is implemented for macOS and Linux only so far".into())
+}
+
 // --- main --------------------------------------------------------------------------------------
 
 fn main() -> ExitCode {
@@ -1775,6 +1941,8 @@ fn run() -> Result<()> {
     let mut gui_test = false;
     let mut in_window = false;
     let mut screenshot = None;
+    let mut hot_dir = None;
+    let mut hot_wait = None;
     while let Some(a) = args.next() {
         match a.as_str() {
             "--render" => wav = Some(PathBuf::from(args.next().ok_or("--render needs a path")?)),
@@ -1782,6 +1950,8 @@ fn run() -> Result<()> {
             "--gui-test" => gui_test = true,
             "--parent-in-window" => in_window = true,
             "--screenshot" => screenshot = Some(PathBuf::from(args.next().ok_or("--screenshot needs a path")?)),
+            "--hot-wait" => hot_wait = Some(args.next().ok_or("--hot-wait needs seconds")?.parse::<f64>().map_err(|e| e.to_string())?),
+            "--hot-test" => hot_dir = Some(PathBuf::from(args.next().ok_or("--hot-test needs the publish folder")?)),
             _ if !a.starts_with('-') && bundle.is_none() => bundle = Some(PathBuf::from(a)),
             _ => return Err(format!("unexpected argument {a}")),
         }
@@ -1812,6 +1982,11 @@ fn run() -> Result<()> {
             );
         }
         render(&loaded, wav.as_deref())?;
+        if let Some(dir) = &hot_dir {
+            let r = hot_test(&loaded, dir, hot_wait);
+            ((*loaded.plugin).destroy.unwrap())(loaded.plugin);
+            return r;
+        }
         let gui_result =
             if gui_test || gui_seconds.is_some() || screenshot.is_some() { gui_run(&loaded, gui_seconds, gui_test, screenshot.as_deref(), in_window) } else { Ok(()) };
         ((*loaded.plugin).destroy.unwrap())(loaded.plugin);

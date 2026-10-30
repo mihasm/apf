@@ -4,6 +4,7 @@ members = [
     "crates/apf",
     "crates/apf-webview",
     "crates/apf-host",
+    "crates/apf-hot",
     "crates/apf-test",
     "examples/01-sine",
     "examples/02-gain",

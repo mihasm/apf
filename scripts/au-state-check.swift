@@ -16,7 +16,9 @@
 // plays, and takes A's fullState. Then two fresh instances B and C each render a little, get
 // that state (as a project load does), and play the same notes; C has its web view opened (and
 // closed) between the load and the notes, B never has. B and C must be bit-identical, and both
-// must sound like A. No audio device is opened: the units are rendered directly.
+// must sound like A. No audio device is opened: the units are rendered directly. An effect (type
+// aufx, or aumf: an effect that takes MIDI) gets a test signal on its input: a sine in every
+// octave band, its phase set by the absolute sample position alone. Instruments get silence.
 //
 // Exit status 0: identical; 1: they differ (the numbers say how); 2: usage or host error.
 
@@ -63,6 +65,18 @@ app.setActivationPolicy(.accessory)
 
 let sampleRate = 48_000.0
 let block: AUAudioFrameCount = 512
+/// An effect's sound comes from its input: it gets the test signal there.
+let effect = args[1] == "aufx" || args[1] == "aumf"
+
+/// The test signal an effect gets on its input, at the absolute sample position `n`: a sine in
+/// every octave band the sounds are compared in. It depends on `n` alone, so every instance,
+/// scenario and render feeds the unit the same samples at the same moments.
+func testSignal(_ n: Double) -> Float {
+    let frequencies: [Double] = [90, 180, 360, 720, 1440, 2880, 5760, 11520]
+    var s = 0.0
+    for f in frequencies { s += sin(2 * Double.pi * (f * n / sampleRate).truncatingRemainder(dividingBy: 1)) }
+    return Float(0.05 * s)
+}
 
 func pump(_ seconds: Double) { RunLoop.main.run(until: Date(timeIntervalSinceNow: seconds)) }
 
@@ -80,6 +94,11 @@ func instantiate() -> AUAudioUnit {
     let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
     do {
         try au.outputBusses[0].setFormat(format)
+        // An effect's input bus is off until a host connects it; the pull block is its source.
+        if effect && au.inputBusses.count > 0 {
+            try au.inputBusses[0].setFormat(format)
+            au.inputBusses[0].isEnabled = true
+        }
         au.maximumFramesToRender = block
         try au.allocateRenderResources()
     } catch { print("allocateRenderResources failed: \(error)"); exit(2) }
@@ -92,15 +111,31 @@ final class Player {
     let render: AURenderBlock
     let buffer: AVAudioPCMBuffer
     var sampleTime = 0.0
-    /// An instrument has no input, but the AUv2 bridge calls the pull block anyway.
-    let pull: AURenderPullInputBlock = { _, _, _, _, list in
-        for b in UnsafeMutableAudioBufferListPointer(list) { if let d = b.mData { memset(d, 0, Int(b.mDataByteSize)) } }
+    /// The effect's input when the unit gives no buffers of its own.
+    let input: AVAudioPCMBuffer
+    /// An effect's input gets the test signal from the render clock's position. An instrument
+    /// has no input, but the AUv2 bridge calls the pull block anyway: it gets silence.
+    lazy var pull: AURenderPullInputBlock = { [unowned self] _, _, frames, bus, list in
+        let buffers = UnsafeMutableAudioBufferListPointer(list)
+        for i in 0..<buffers.count {
+            guard effect && bus == 0 else {
+                if let d = buffers[i].mData { memset(d, 0, Int(buffers[i].mDataByteSize)) }
+                continue
+            }
+            if buffers[i].mData == nil && i < Int(input.format.channelCount) {
+                buffers[i].mData = UnsafeMutableRawPointer(input.floatChannelData![i])
+                buffers[i].mDataByteSize = frames * 4
+            }
+            guard let d = buffers[i].mData?.assumingMemoryBound(to: Float.self) else { continue }
+            for n in 0..<min(Int(frames), Int(buffers[i].mDataByteSize) / 4) { d[n] = testSignal(sampleTime + Double(n)) }
+        }
         return noErr
     }
     init(_ au: AUAudioUnit) {
         self.au = au
         render = au.renderBlock
         buffer = AVAudioPCMBuffer(pcmFormat: AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!, frameCapacity: block)!
+        input = AVAudioPCMBuffer(pcmFormat: AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!, frameCapacity: block)!
     }
     /// Render `seconds` (whole blocks); `midi` is sent before the first block.
     func play(_ seconds: Double, midi: [[UInt8]] = []) -> ([Float], [Float]) {

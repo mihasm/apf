@@ -31,7 +31,9 @@
 // What can be asked is measured first: a second instance given A's history (the same samples,
 // unless the sound has random sources: then twins compare by spectrum, 0.2 dB), and the
 // program loaded at two moments (the same samples, unless the load time matters).
-// No audio device is opened; everything renders offline in this process.
+// No audio device is opened; everything renders offline in this process. An effect (a main audio
+// input, and the Fx category or no event input) gets a test signal on that input: a sine in every
+// octave band, its phase set by the absolute sample position alone. Instruments get silence.
 //
 // Exit status 0: every scenario passed; 1: one failed (the numbers say how); 2: usage or host
 // error.
@@ -124,6 +126,17 @@ std::vector<char> bytesOf(MemoryStream& s)
 
 std::string str(const TChar* s) { return Steinberg::Vst::StringConvert::convert(s); }
 
+/// The test signal an effect gets on its main input, at the absolute sample position `n`: a sine
+/// in every octave band the sounds are compared in. It depends on `n` alone, so every instance,
+/// scenario and render feeds the plug-in the same samples at the same moments.
+float testSignal(int64 n)
+{
+    static const double kFrequencies[] = {90, 180, 360, 720, 1440, 2880, 5760, 11520};
+    double s = 0;
+    for (double f : kFrequencies) s += std::sin(2 * kPi * std::fmod(f * double(n) / kRate, 1.0));
+    return float(0.05 * s);
+}
+
 // --- the host's side of the plug-in -----------------------------------------------------------
 
 /// What a host gives the controller: edits from the plug-in (its view, a preset it loaded)
@@ -156,6 +169,21 @@ public:
     }
 };
 
+/// Whether the plug-in is an effect, whose sound comes from its audio input: its first audio
+/// input is a main bus, and its class is in the Fx category (and not an instrument) or it takes
+/// no events.
+bool isEffect(IComponent& component, const VST3::Hosting::ClassInfo& info)
+{
+    BusInfo bus{};
+    if (component.getBusCount(kAudio, kInput) < 1 || component.getBusInfo(kAudio, kInput, 0, bus) != kResultOk ||
+        bus.busType != kMain)
+        return false;
+    const auto& sub = info.subCategories();
+    bool fx = std::find(sub.begin(), sub.end(), PlugType::kFx) != sub.end();
+    bool instrument = std::find(sub.begin(), sub.end(), PlugType::kInstrument) != sub.end();
+    return (fx && !instrument) || component.getBusCount(kEvent, kInput) == 0;
+}
+
 /// One plug-in instance and its render clock.
 class Instance
 {
@@ -169,6 +197,7 @@ public:
         processor = U::cast<IAudioProcessor>(component);
         if (!component || !controller || !processor) return;
         single = U::cast<IEditController>(component) != nullptr;
+        effect = isEffect(*component, info);
         handler = owned(new Handler);
         handler->edit = [this](ParamID id, ParamValue v) { queue(id, v); };
         controller->setComponentHandler(handler);
@@ -285,9 +314,16 @@ public:
             }
             events.addEvent(e);
         }
+        // An effect's main input gets the test signal; every other input gets silence.
         for (int32 b = 0; b < data.numInputs; ++b)
             for (int32 c = 0; c < data.inputs[b].numChannels; ++c)
-                std::memset(data.inputs[b].channelBuffers32[c], 0, sizeof(float) * kBlock);
+            {
+                float* x = data.inputs[b].channelBuffers32[c];
+                if (effect && b == 0)
+                    for (int32 i = 0; i < kBlock; ++i) x[i] = testSignal(rendered + i);
+                else
+                    std::memset(x, 0, sizeof(float) * kBlock);
+            }
         context = {};
         context.state = ProcessContext::kTempoValid | ProcessContext::kTimeSigValid |
                         ProcessContext::kContTimeValid | ProcessContext::kProjectTimeMusicValid;
@@ -366,6 +402,7 @@ public:
 
     bool ok = false;
     bool single = false;
+    bool effect = false; // the main input gets the test signal
     bool active = false;
     bool prepared = false;
     int64 rendered = 0;
@@ -818,6 +855,7 @@ int main(int argc, char* argv[])
     }
     std::printf("plug-in: %s (%s)\n", classInfo.name().c_str(),
                 a->single ? "one object for component and controller" : "separate controller");
+    if (a->effect) std::printf("an effect: its main input gets the test signal\n");
     std::printf("parameters: %zu, %zu moved by the edits, %zu MIDI controllers\n", cat.params.size(), editable, midi);
     if (program >= 0) std::printf("program: %d '%s' of %zu\n", program, cat.programs[program].c_str(), cat.programs.size());
 

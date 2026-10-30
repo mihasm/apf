@@ -1,4 +1,4 @@
-//! Web editors: the plugin's UI is HTML/CSS/JS shown in the system webview (WKWebView on
+//! Web views: the plugin's UI is HTML/CSS/JS shown in the system webview (WKWebView on
 //! macOS, WebView2 on Windows, WebKitGTK on Linux) through `wry`, created as a child of the
 //! window the host gives the plugin. Tauri itself cannot run inside a plugin because it owns
 //! the window and the event loop; `wry` is the layer below it that can attach to a window it
@@ -45,14 +45,14 @@ use std::rc::Rc;
 
 use apf::controller::query_arg;
 use apf::preset::{Metadata, SaveError, Source};
-use apf::{ControllerRequest, Editor, EditorContext, ParamKind, ParentWindow};
+use apf::{ControllerRequest, View, ViewContext, ParamKind, ParentWindow};
 use raw_window_handle::{
     AppKitWindowHandle, HandleError, HasWindowHandle, RawWindowHandle, Win32WindowHandle, WindowHandle,
     XlibWindowHandle,
 };
 use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::{header::CONTENT_TYPE, Request, Response, StatusCode};
-use wry::{Rect, WebView, WebViewBuilder};
+use wry::{Rect, WebViewBuilder};
 
 const SCHEME: &str = "apf";
 const CLIENT_JS: &[u8] = include_bytes!("apf.js");
@@ -74,8 +74,8 @@ macro_rules! assets {
     };
 }
 
-/// An [`Editor`] showing a web page.
-pub struct WebEditor {
+/// A [`View`] showing a web page: the plugin's web view.
+pub struct WebView {
     width: u32,
     height: u32,
     resizable: bool,
@@ -83,22 +83,22 @@ pub struct WebEditor {
     max_size: (u32, u32),
     background: (u8, u8, u8, u8),
     assets: &'static [Asset],
-    webview: Option<Rc<WebView>>,
+    webview: Option<Rc<wry::WebView>>,
     #[cfg(target_os = "macos")]
     staging: Option<mac::Staging>,
     /// The scale the host set (CLAP `set_scale`); without it, the DPI of the parent window.
     #[cfg(target_os = "windows")]
     host_scale: Option<f64>,
-    /// The host's window (HWND), while the editor is open.
+    /// The host's window (HWND), while the web view is open.
     #[cfg(target_os = "windows")]
     parent: Option<isize>,
-    /// A resizable editor's webview follows its parent window's client area.
+    /// A resizable web view follows its parent window's client area.
     #[cfg(target_os = "windows")]
     follower: Option<win::Follower>,
     /// WebView2's user data folder (its default, beside the host's executable, is not writable).
     #[cfg(target_os = "windows")]
     web_context: Option<wry::WebContext>,
-    /// A resizable editor's webview follows its parent view's frame.
+    /// A resizable web view follows its parent view's frame.
     #[cfg(target_os = "macos")]
     follower: Option<mac::Follower>,
     /// What the page told the plugin (claimed shortcuts), and the way back to its view.
@@ -107,20 +107,20 @@ pub struct WebEditor {
     key_monitor: Option<mac::KeyMonitor>,
 }
 
-/// State shared by the editor and the page's message handler (main thread only).
+/// State shared by the web view and the page's message handler (main thread only).
 #[derive(Default)]
 struct PageLink {
     claims: Rc<RefCell<keys::Claims>>,
     #[cfg(target_os = "macos")]
     view: RefCell<Option<objc2::rc::Weak<objc2_app_kit::NSView>>>,
-    /// The host's window (HWND) and the editor's scale, for keys and `maximize`.
+    /// The host's window (HWND) and the web view's scale, for keys and `maximize`.
     #[cfg(target_os = "windows")]
     parent: std::cell::Cell<isize>,
     #[cfg(target_os = "windows")]
     scale: std::cell::Cell<f64>,
 }
 
-impl WebEditor {
+impl WebView {
     /// `assets` must contain `index.html`.
     pub fn new(width: u32, height: u32, assets: &'static [Asset]) -> Self {
         Self {
@@ -150,7 +150,7 @@ impl WebEditor {
         }
     }
 
-    /// Let the user resize the editor (hosts show a resizable window). The page follows the
+    /// Let the user resize the web view (hosts show a resizable window). The page follows the
     /// window: lay it out for any size (CSS `100vw`/`100vh`, flex or grid), or listen to
     /// `resize`. The framework keeps the size the user chose with the session.
     pub fn resizable(mut self, resizable: bool) -> Self {
@@ -158,7 +158,7 @@ impl WebEditor {
         self
     }
 
-    /// The smallest and largest size a resizable editor takes, in logical pixels (default
+    /// The smallest and largest size a resizable web view takes, in logical pixels (default
     /// 160 × 120 and no practical maximum).
     pub fn size_limits(mut self, min: (u32, u32), max: (u32, u32)) -> Self {
         self.min_size = (min.0.max(1), min.1.max(1));
@@ -167,7 +167,7 @@ impl WebEditor {
     }
 
     /// Open at the size of the screen, less `margin` (room for the host window's title bar and
-    /// toolbar), within the size limits — set the limits first. For hosts that let the editor
+    /// toolbar), within the size limits — set the limits first. For hosts that let the web view
     /// propose its size but not change it afterwards (Logic with an AUv3). A size the user
     /// chose in a session still wins. Keeps the size given to `new` where the screen is not
     /// known (Linux, not on the main thread). On Windows the screen is the primary monitor's
@@ -194,7 +194,7 @@ impl WebEditor {
     }
 
     /// Connect the page's link to the built webview: claimed keys, its view for `maximize`.
-    fn attach_page(&mut self, _webview: &WebView) {
+    fn attach_page(&mut self, _webview: &wry::WebView) {
         #[cfg(target_os = "macos")]
         {
             use wry::WebViewExtMacOS;
@@ -232,13 +232,13 @@ impl HasWindowHandle for Parent {
             }
             ParentWindow::X11(id) => RawWindowHandle::Xlib(XlibWindowHandle::new(id as _)),
         };
-        // SAFETY: the host keeps the parent window alive while the editor is open, and the
+        // SAFETY: the host keeps the parent window alive while the web view is open, and the
         // webview is destroyed in `close`, before the host may destroy it.
         Ok(unsafe { WindowHandle::borrow_raw(raw) })
     }
 }
 
-impl Editor for WebEditor {
+impl View for WebView {
     fn size(&self) -> (u32, u32) {
         (self.width, self.height)
     }
@@ -291,7 +291,7 @@ impl Editor for WebEditor {
         true
     }
 
-    fn open(&mut self, parent: ParentWindow, ctx: EditorContext) -> Result<(), String> {
+    fn open(&mut self, parent: ParentWindow, ctx: ViewContext) -> Result<(), String> {
         self.close();
         let assets = self.assets;
         let dev_dir = std::env::var_os("APF_UI_DIR").map(PathBuf::from);
@@ -303,7 +303,7 @@ impl Editor for WebEditor {
 
         #[cfg(target_os = "windows")]
         let mut web_context = {
-            let ParentWindow::Win32(hwnd) = parent else { return Err("the editor needs a Win32 window".into()) };
+            let ParentWindow::Win32(hwnd) = parent else { return Err("the web view needs a Win32 window".into()) };
             self.parent = Some(hwnd.as_ptr() as isize);
             page.parent.set(hwnd.as_ptr() as isize);
             page.scale.set(self.scale());
@@ -355,7 +355,7 @@ impl Editor for WebEditor {
         }
 
         let webview = Rc::new(builder.build_as_child(&Parent(parent)).map_err(|e| e.to_string())?);
-        // wry pins a child webview's size; a resizable editor follows its parent view also
+        // wry pins a child webview's size; a resizable web view follows its parent view also
         // when a host resizes that without calling `set_size`.
         #[cfg(target_os = "macos")]
         if self.resizable {
@@ -451,7 +451,7 @@ mod win {
         unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool().then_some(info.rcWork)
     }
 
-    /// The primary monitor without the taskbar, less the frame of a window around the editor
+    /// The primary monitor without the taskbar, less the frame of a window around the web view
     /// (hosts put it in a window of their own), in logical pixels.
     pub fn primary_work_area() -> Option<(f64, f64)> {
         // SAFETY: plain Win32 getters.
@@ -466,15 +466,15 @@ mod win {
         Some((((r.right - r.left) - fw) as f64 / s, ((r.bottom - r.top) - fh) as f64 / s))
     }
 
-    /// The largest editor the monitor of the host's window has room for, in logical pixels:
-    /// its work area less the host window's frame around the editor (title bar, menus, an FX
+    /// The largest web view the monitor of the host's window has room for, in logical pixels:
+    /// its work area less the host window's frame around the web view (title bar, menus, an FX
     /// list beside it).
     pub fn screen_room(parent: isize, scale: f64) -> Option<(f64, f64)> {
         if parent == 0 || scale <= 0.0 {
             return None;
         }
         let parent = hwnd(parent);
-        // SAFETY: Win32 getters on the host's window, alive while the editor is open.
+        // SAFETY: Win32 getters on the host's window, alive while the web view is open.
         unsafe {
             let work = work_area(MonitorFromWindow(parent, MONITOR_DEFAULTTONEAREST))?;
             let (mut client, mut frame) = (RECT::default(), RECT::default());
@@ -483,7 +483,7 @@ mod win {
             let (mut cw, mut ch) = (0, 0);
             if !root.is_invalid() && GetWindowRect(root, &mut frame).is_ok() {
                 let (w, h) = ((frame.right - frame.left) - (client.right - client.left), (frame.bottom - frame.top) - (client.bottom - client.top));
-                // A docked editor in a host's main window has no frame of its own to speak of.
+                // A docked web view in a host's main window has no frame of its own to speak of.
                 if (0..1000).contains(&w) && (0..600).contains(&h) {
                     (cw, ch) = (w, h);
                 }
@@ -528,9 +528,9 @@ mod win {
         scale: Cell<f64>,
     }
 
-    /// Keeps a resizable editor's webview filling the host's window (its client area), within
-    /// the editor's limits, whenever the host resizes it — with or without `set_size`, before
-    /// or after it. The host's window is subclassed while the editor is open.
+    /// Keeps a resizable web view filling the host's window (its client area), within
+    /// the web view's limits, whenever the host resizes it — with or without `set_size`, before
+    /// or after it. The host's window is subclassed while the web view is open.
     pub struct Follower {
         state: Box<Follow>,
     }
@@ -633,7 +633,7 @@ mod mac {
 
     impl Staging {
         pub fn new(width: u32, height: u32) -> Result<Self, String> {
-            let mtm = MainThreadMarker::new().ok_or("the editor must be opened on the main thread")?;
+            let mtm = MainThreadMarker::new().ok_or("the web view must be opened on the main thread")?;
             let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64));
             // SAFETY: plain AppKit calls on the main thread.
             let window = unsafe {
@@ -674,10 +674,10 @@ mod mac {
         set_frame(webview, width, height);
     }
 
-    /// Keeps a webview filling its parent view, within the editor's size limits, whenever the
+    /// Keeps a webview filling its parent view, within the web view's size limits, whenever the
     /// parent's frame changes. Hosts resize their view before `set_size` (clap-wrapper's AUv2
     /// and VST3), after it (REAPER's CLAP host), or without it, and may make it smaller than
-    /// the editor's minimum (REAPER): AppKit's autoresizing gets the first two wrong in one of
+    /// the web view's minimum (REAPER): AppKit's autoresizing gets the first two wrong in one of
     /// the orders (it adds the growth a second time) and squeezes the page in the last.
     pub struct Follower {
         token: Retained<ProtocolObject<dyn NSObjectProtocol>>,
@@ -694,7 +694,7 @@ mod mac {
     impl Follower {
         pub fn new(webview: &WebView, min: (u32, u32), max: (u32, u32)) -> Option<Follower> {
             let view: &NSView = &webview.webview();
-            // SAFETY: AppKit calls on the main thread, where the editor lives.
+            // SAFETY: AppKit calls on the main thread, where the web view lives.
             let parent = unsafe { view.superview() }?;
             view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewNotSizable);
             parent.setPostsFrameChangedNotifications(true);
@@ -826,7 +826,7 @@ mod mac {
                 let pass = event.as_ptr();
                 let Some(view) = view.load() else { return pass };
                 // The host's side of the webview: where WebKit's super-class handling sends a
-                // key on (its superview, the view the host gave the editor).
+                // key on (its superview, the view the host gave the web view).
                 // SAFETY: an AppKit getter on the main thread.
                 let host = || unsafe { view.nextResponder() };
                 let kind = ev.r#type();
@@ -930,9 +930,9 @@ mod mac {
         Some((size.width, size.height))
     }
 
-    /// The largest size the editor can take on the screen it is on: the screen without the
-    /// menu bar and Dock, less the host window's frame around the editor (its title bar and
-    /// toolbar) when the editor is in a window of its own. `None` before the editor is in a
+    /// The largest size the web view can take on the screen it is on: the screen without the
+    /// menu bar and Dock, less the host window's frame around the web view (its title bar and
+    /// toolbar) when the web view is in a window of its own. `None` before the web view is in a
     /// window.
     pub fn screen_room(view: &NSView) -> Option<(f64, f64)> {
         // SAFETY: AppKit getters on the main thread.
@@ -944,8 +944,8 @@ mod mac {
         Some((room.width - chrome_w, room.height - chrome_h))
     }
 
-    /// The host window's frame around the editor's view, when the window is the editor's own
-    /// (a docked editor in a host's main window has no frame of its own to speak of).
+    /// The host window's frame around the web view, when the window is the web view's own
+    /// (a docked web view in a host's main window has no frame of its own to speak of).
     fn chrome(window: &NSWindow, parent: &NSView) -> Option<(f64, f64)> {
         let frame = window.frame().size;
         let inner = parent.frame().size;
@@ -962,10 +962,10 @@ mod mac {
         name.contains("ViewService") || name.contains("Extension")
     }
 
-    /// After the host resized a window of its own for a larger editor: move the window back
+    /// After the host resized a window of its own for a larger web view: move the window back
     /// onto its screen if the new size pushed it past an edge (a host keeps the top left
     /// corner; a full-screen size then hangs below the Dock). Only in-process, only a window
-    /// that is the editor's own.
+    /// that is the web view's own.
     pub fn keep_on_screen(view: &NSView) {
         if in_view_service() {
             return;
@@ -1027,7 +1027,7 @@ fn mime_of(path: &str) -> &'static str {
     }
 }
 
-/// Whether and within which limits the editor may be resized (for the page's own resize).
+/// Whether and within which limits the web view may be resized (for the page's own resize).
 #[derive(Debug, Clone, Copy)]
 struct Sizing {
     resizable: bool,
@@ -1036,7 +1036,7 @@ struct Sizing {
 }
 
 fn serve(
-    ctx: &EditorContext,
+    ctx: &ViewContext,
     sizing: &Sizing,
     assets: &'static [Asset],
     dev_dir: Option<&std::path::Path>,
@@ -1121,7 +1121,7 @@ fn serve(
 }
 
 /// `/__apf/plugin/<route>`: the plugin controller's own requests.
-fn plugin_request(ctx: &EditorContext, method: &str, route: &str, query: &str, body: &[u8]) -> Response<Cow<'static, [u8]>> {
+fn plugin_request(ctx: &ViewContext, method: &str, route: &str, query: &str, body: &[u8]) -> Response<Cow<'static, [u8]>> {
     let Some(controller) = ctx.controller() else {
         return response(StatusCode::NOT_FOUND, "text/plain", Cow::Borrowed(b"this plugin has no controller"));
     };
@@ -1136,7 +1136,7 @@ fn plugin_request(ctx: &EditorContext, method: &str, route: &str, query: &str, b
     }
 }
 
-fn handle_message(ctx: &EditorContext, sizing: &Sizing, page: &PageLink, msg: &str) {
+fn handle_message(ctx: &ViewContext, sizing: &Sizing, page: &PageLink, msg: &str) {
     // Lines from the page for the host's log (apf.log): plugin hosts show no web console.
     if let Some(text) = msg.strip_prefix("log ") {
         eprintln!("[apf ui] {text}");
@@ -1236,7 +1236,7 @@ fn save_metadata(query: &str) -> Option<Metadata> {
     Some(meta.cleaned())
 }
 
-fn presets_json(ctx: &EditorContext) -> String {
+fn presets_json(ctx: &ViewContext) -> String {
     let presets = ctx.presets();
     let mut out = String::with_capacity(64 + 200 * presets.len());
     out.push_str("{\"presets\":[");
@@ -1272,7 +1272,7 @@ fn presets_json(ctx: &EditorContext) -> String {
 }
 
 /// The current preset and the MIDI learn state, as members of the values object.
-fn session_json(ctx: &EditorContext, out: &mut String) {
+fn session_json(ctx: &ViewContext, out: &mut String) {
     out.push_str(",\"preset\":");
     match ctx.current_preset() {
         Some((source, name, changed)) => {
@@ -1301,7 +1301,7 @@ fn session_json(ctx: &EditorContext, out: &mut String) {
     );
 }
 
-fn info_json(ctx: &EditorContext, sizing: &Sizing) -> String {
+fn info_json(ctx: &ViewContext, sizing: &Sizing) -> String {
     let params = ctx.params();
     let mut out = String::with_capacity(256 * params.len());
     let _ = write!(out, "{{\"gen\":{},", ctx.generation());
@@ -1352,7 +1352,7 @@ fn info_json(ctx: &EditorContext, sizing: &Sizing) -> String {
     out
 }
 
-fn values_json(ctx: &EditorContext) -> String {
+fn values_json(ctx: &ViewContext) -> String {
     let params = ctx.params();
     let mut out = String::with_capacity(32 * params.len());
     // Read the generation first: a change racing with this read shows up in the next poll.
@@ -1431,7 +1431,7 @@ mod tests {
         }
     }
 
-    fn call(ctx: &EditorContext, method: &str, uri: &str, body: &[u8]) -> (u16, String, Vec<u8>) {
+    fn call(ctx: &ViewContext, method: &str, uri: &str, body: &[u8]) -> (u16, String, Vec<u8>) {
         let request = Request::builder().method(method).uri(format!("apf://localhost{uri}")).body(body.to_vec()).unwrap();
         let sizing = Sizing { resizable: true, min: (300, 200), max: (2000, 1500) };
         let r = serve(ctx, &sizing, &[], None, &request);
@@ -1441,7 +1441,7 @@ mod tests {
 
     #[test]
     fn plugin_requests_reach_the_controller() {
-        let ctx = EditorContext::without_host(&mut WithController(true));
+        let ctx = ViewContext::without_host(&mut WithController(true));
         let (status, mime, body) = call(&ctx, "GET", "/__apf/plugin/notes?q=a%20b", b"");
         assert_eq!((status, mime.as_str()), (200, "application/json"));
         assert_eq!(String::from_utf8(body).unwrap(), r#"{"notes":"C E G","q":"a b"}"#);
@@ -1514,7 +1514,7 @@ mod tests {
         let texts: &'static [&'static str] = texts.leak();
 
         let t = std::time::Instant::now();
-        let ctx = EditorContext::without_host_with_presets(&mut WithController(true), texts);
+        let ctx = ViewContext::without_host_with_presets(&mut WithController(true), texts);
         let create_ms = t.elapsed().as_secs_f64() * 1000.0;
         let t = std::time::Instant::now();
         let (status, mime, body) = call(&ctx, "GET", "/__apf/presets", b"");
@@ -1562,7 +1562,7 @@ mod tests {
     #[test]
     fn saving_a_preset_carries_its_metadata() {
         let _home = test_home();
-        let ctx = EditorContext::without_host(&mut WithController(true));
+        let ctx = ViewContext::without_host(&mut WithController(true));
         let save = |q: &str| String::from_utf8(call(&ctx, "GET", &format!("/__apf/preset/save?{q}"), b"").2).unwrap();
         let r = save("name=My%20Sub&type=Bass&subtype=Sub&mood=Dark,%20Deep,,dark&description=Low%20and%20round&author=Me");
         assert!(r.starts_with(r#"{"ok":true,"id":"file:"#), "{r}");
@@ -1594,13 +1594,13 @@ mod tests {
 
     #[test]
     fn without_a_controller_plugin_requests_are_not_found() {
-        let ctx = EditorContext::without_host(&mut WithController(false));
+        let ctx = ViewContext::without_host(&mut WithController(false));
         assert!(ctx.controller().is_none());
         assert_eq!(call(&ctx, "GET", "/__apf/plugin/notes", b"").0, 404);
         assert_eq!(call(&ctx, "POST", "/__apf/plugin/", b"{}").0, 404);
         let gen = ctx.generation();
         assert_eq!(call(&ctx, "GET", &format!("/__apf/values?gen={gen}"), b"").0, 204);
-        // A resizable editor tells the page its limits (for apf.resize and the grip).
+        // A resizable web view tells the page its limits (for apf.resize and the grip).
         let info = String::from_utf8(call(&ctx, "GET", "/__apf/info", b"").2).unwrap();
         assert!(info.contains(r#""resize":{"min":[300,200],"max":[2000,1500]}"#), "{info}");
         let (status, _, body) = call(&ctx, "POST", "/__apf/echo", b"abc");

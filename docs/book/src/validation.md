@@ -8,15 +8,15 @@ was true on the date given, not that every later change was checked the same way
 
 | Check | Result |
 |---|---|
-| `cargo test` (parameters, queue, state, presets, MIDI learn, ADSR; CLAP interface: pedal, bend, mod wheel, envelope, presets, an old session sample-exact, random playing, no allocation in `process`; controller: session chunk, presets with JSON and text data, request routing, `mark_dirty` off the main thread, parameter gestures, editor size in the session; sub-block song position; preset metadata read, written and kept on overwrite, saved through `/__apf/preset/save`, reported to CLAP indexers; 250 factory and 250 user presets of 6 KB listed under 20 ms) | pass |
+| `cargo test` (parameters, queue, state, presets, MIDI learn, ADSR; CLAP interface: pedal, bend, mod wheel, envelope, presets, an old session sample-exact, random playing, no allocation in `process`; controller: session chunk, presets with JSON and text data, request routing, `mark_dirty` off the main thread, parameter gestures, web view size in the session; sub-block song position; preset metadata read, written and kept on overwrite, saved through `/__apf/preset/save`, reported to CLAP indexers; 250 factory and 250 user presets of 6 KB listed under 20 ms) | pass |
 | clap-validator 0.4.1 (with the deadlock fix below) | 38 passed, 0 failed, 6 skipped; the preset-discovery tests pass, also with 250 extra user presets (`list presets`: 256, with features and descriptions) |
-| `apf-host` on the built `.clap`: render and editor round trip (page to host to page); claimed shortcuts reach the page, other keys reach the host with their key-up and modifier changes | pass |
+| `apf-host` on the built `.clap`: render and web view round trip (page to host to page); claimed shortcuts reach the page, other keys reach the host with their key-up and modifier changes | pass |
 | Steinberg VST3 validator (SDK 3.8.0) | 47 passed, 0 failed |
-| `vst3-state-check` (demo synth, and a larger modular synth built on APF): seven restore orders, editor closed against opened | pass; the demo synth bit-identical to the saved session (largest sample difference 0); the modular synth within 0.22 dB per band, and like its same-timed twins; `--inject-stale` fails all eight scenarios (2026-10-25) |
+| `vst3-state-check` (demo synth, and a larger modular synth built on APF): seven restore orders, web view closed against opened | pass; the demo synth bit-identical to the saved session (largest sample difference 0); the modular synth within 0.22 dB per band, and like its same-timed twins; `--inject-stale` fails all eight scenarios (2026-10-25) |
 | `auval` AUv2 (`aumu ApDs MiSm`) | AU VALIDATION SUCCEEDED |
 | `auval` AUv3 (`aumu ApD3 MiSm`) | AU VALIDATION SUCCEEDED |
 | REAPER 7.62: CLAP, VST3 and AU loaded, rendered offline | all three identical (-14.8 dBFS RMS) |
-| Logic Pro: AUv2 and AUv3 load, the web editor shows, edits reach Logic | pass (open points in [Known issues](known-issues.md)) |
+| Logic Pro: AUv2 and AUv3 load, the web view shows, edits reach Logic | pass (open points in [Known issues](known-issues.md)) |
 | Logic Pro, AUv3: a project saved before new parameters were added loads with its sound; Smart Controls follow the first eight parameters; factory presets in Logic's menu; mod wheel, bend and pedal reach the plugin | pass (2026-10-22) |
 | `au-probe`: AUv2 and AUv3 list the factory and user presets, selecting one loads it (also from the sandboxed AUv3) | pass |
 | Preset bar with 256 presets in `apf-host` (WKWebView): menu grouped by type, description as tooltip, the arrows step in that order and load | pass |
@@ -31,9 +31,9 @@ was true on the date given, not that every later change was checked the same way
 | Check | Result |
 |---|---|
 | Logic Pro 12.4, AUv3, a larger modular synth on APF with its window open, `cargo xtask hot --watch` running: a panel title changed in the Rust source | the watcher built and published in 3.3 s; the open window showed the new title 128 ms later; changed back in 2.4 s and 100 ms; one extension process throughout |
-| `apf-host --hot-test` (CLAP): a held chord, the editor open, a copy of the build published | swapped in 0.2 to 0.3 s while blocks kept playing; the moved parameter kept; the editor open again; sound after the swap |
+| `apf-host --hot-test` (CLAP): a held chord, the web view open, a copy of the build published | swapped in 0.2 to 0.3 s while blocks kept playing; the moved parameter kept; the web view open again; sound after the swap |
 | A real DSP change while running: the modular synth's output at half gain (CLAP in `apf-host`, AUv3 out of process); example 10's oscillator fixed to a square wave (CLAP) | heard across the swap: −4.8 to −11.3 dBFS (CLAP), −5.1 to −11.2 dBFS (AUv3); −32.3 to −28.8 dBFS (example 10) |
-| `au-hot-check`: the AUv2 in-process and the installed AUv3 out of process, editor open | swapped while rendering, the parameter kept, sound after; the AUv3 loads the builds through its sandbox exception |
+| `au-hot-check`: the AUv2 in-process and the installed AUv3 out of process, web view open | swapped while rendering, the parameter kept, sound after; the AUv3 loads the builds through its sandbox exception |
 | `cargo xtask validate --hot`, example 10 and the modular synth: every validator above on the shell bundles, plus the three swap checks | pass |
 
 Not verified for hot reload: VST3 in a host (the shell passes the VST3 validator and the state
@@ -42,7 +42,7 @@ check; its swap runs the same way as the CLAP's), REAPER, Windows and Linux.
 Not verified on macOS: a controller's own knobs, wheels and pedal played by hand in Logic;
 Bitwig (remote controls); `mark_dirty` lighting Logic's or REAPER's "changed" mark by a
 controller edit (checked only through the CLAP interface); an `aumf` and an input-taking
-`aumu` in Logic; Logic resizing an AUv2 editor by its window edge (see
+`aumu` in Logic; Logic resizing an AUv2 web view by its window edge (see
 [Known issues](known-issues.md)). The standalone app has an open problem: do not leave it
 running unattended.
 
@@ -52,7 +52,7 @@ running unattended.
 |---|---|
 | `cargo test --workspace` | pass |
 | `apf-host --gui-test` on the CLAP of the demo synth, the tuning demo and a larger modular synth: render, page-host-page round trip with a 1 MiB POST, Ctrl+D and Backspace into the page, an unclaimed Ctrl+S on to the host's window, `apf.maximize`, five resizes | pass |
-| REAPER 7.83: VST3 and CLAP scanned and loaded, offline render, project saved and reloaded (state restored without opening the editor, renders equal to -98 dB), editor opens, resizes, closes; the space bar over the editor plays in REAPER | pass |
+| REAPER 7.83: VST3 and CLAP scanned and loaded, offline render, project saved and reloaded (state restored without opening the web view, renders equal to -98 dB), web view opens, resizes, closes; the space bar over the web view plays in REAPER | pass |
 | `cargo xtask bundle` and `install` from Git Bash, PowerShell and cmd | pass |
 | `cargo xtask validate` on a larger modular synth: clap-validator 0.4.1 (37 passed, 0 failed, 7 skipped), `apf-host`, Steinberg VST3 validator (47 passed), `vst3-state-check` | pass |
 

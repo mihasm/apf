@@ -5,15 +5,15 @@
 //! * 04: voices, an ADSR envelope per voice, velocity, stealing the oldest voice,
 //! * 05: an LFO, the mod wheel and the pitch wheel, applied on top of the parameters,
 //! * 06: a state-variable filter with a cutoff that glides,
-//! * 07: a web editor whose controls are bound to parameters,
-//! * 08: factory presets with metadata, and the preset bar in the editor,
+//! * 07: a web view whose controls are bound to parameters,
+//! * 08: factory presets with metadata, and the preset bar in the web view,
 //! * 09: MIDI learn for free (right-click a control), and remote controls.
 //!
 //! The signal path: oscillator -> filter -> envelope -> sum of the voices -> gain.
 //! The LFO and the mod wheel move the filter's cutoff, the pitch wheel bends all voices.
 
 use apf::prelude::*;
-use apf_webview::{assets, Asset, WebEditor};
+use apf_webview::{assets, Asset, WebView};
 
 // The order matters: Audio Unit hosts list parameters in it, and Logic's Smart Controls take
 // the first ones. Keys never change; new parameters are appended (example 03).
@@ -225,8 +225,8 @@ impl Plugin for Synth {
         }
     }
 
-    fn editor() -> Option<Box<dyn Editor>> {
-        Some(Box::new(WebEditor::new(720, 330, UI).background(18, 19, 24)))
+    fn view() -> Option<Box<dyn View>> {
+        Some(Box::new(WebView::new(720, 330, UI).background(18, 19, 24)))
     }
 }
 

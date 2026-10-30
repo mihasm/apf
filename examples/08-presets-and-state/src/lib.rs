@@ -7,13 +7,13 @@
 //!
 //! * it is saved with the host's session and restored with it,
 //! * it is stored in every preset (user and factory) and loaded back with it,
-//! * the editor shows "changed" next to the preset name when it is edited, and
+//! * the web view shows "changed" next to the preset name when it is edited, and
 //!   `mark_dirty` tells the host that the project has unsaved changes.
 //!
 //! **Presets.** A `.apfpreset` file is JSON: parameter values by key, in the units the user
 //! sees, plus optional metadata (`type`, `subtype`, `mood`, `description`, `author`) for
 //! sound browsers. Factory presets are compiled in (`presets/`, listed in
-//! `FACTORY_PRESETS`); the preset bar `<div data-apf-presets>` of the editor saves, lists and
+//! `FACTORY_PRESETS`); the preset bar `<div data-apf-presets>` of the web view saves, lists and
 //! deletes the user's own.
 
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use apf::json::{self, Value};
 use apf::prelude::*;
-use apf_webview::{assets, Asset, WebEditor};
+use apf_webview::{assets, Asset, WebView};
 
 const PARAMS: &[ParamDef] = &[
     ParamDef::choice("wave", "Waveform", &["Sine", "Saw", "Square", "Triangle"], 1),
@@ -111,7 +111,7 @@ impl Controller for ChordController {
     fn revision(&self) -> u64 {
         self.chord.revision.load(Ordering::Acquire)
     }
-    // The editor's requests: `apf.plugin.get("chord")` and `apf.plugin.post("chord", {...})`.
+    // The web view's requests: `apf.plugin.get("chord")` and `apf.plugin.post("chord", {...})`.
     fn request(&self, r: &ControllerRequest) -> ControllerResponse {
         if r.path != "chord" {
             return ControllerResponse::not_found();
@@ -231,8 +231,8 @@ impl Plugin for ChordPad {
         }
     }
 
-    fn editor() -> Option<Box<dyn Editor>> {
-        Some(Box::new(WebEditor::new(520, 330, UI).background(18, 19, 24)))
+    fn view() -> Option<Box<dyn View>> {
+        Some(Box::new(WebView::new(520, 330, UI).background(18, 19, 24)))
     }
 }
 

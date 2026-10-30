@@ -1,19 +1,19 @@
-# The web editor
+# The web view
 
-A plugin's editor is a web page. APF shows it in the system's web view (WKWebView on macOS,
+A plugin's web view is a web page. APF shows it with the system's browser engine (WKWebView on macOS,
 WebView2 on Windows) as a child of the window the host provides. You write HTML, CSS and
 JavaScript; the page is compiled into the plugin and served from memory, so the plugin is
 still one file and works offline.
 
-## Add an editor
+## Add a web view
 
 ```rust,ignore
-use apf_webview::{assets, Asset, WebEditor};
+use apf_webview::{assets, Asset, WebView};
 
 const UI: &[Asset] = assets!["index.html" => "../ui/index.html"];   // path relative to this file
 
-fn editor() -> Option<Box<dyn Editor>> {          // in `impl Plugin for ...`
-    Some(Box::new(WebEditor::new(420, 240, UI)))   // width and height in logical pixels
+fn view() -> Option<Box<dyn View>> {          // in `impl Plugin for ...`
+    Some(Box::new(WebView::new(420, 240, UI)))   // width and height in logical pixels
 }
 ```
 
@@ -24,7 +24,7 @@ bridge library, which defines `window.apf`:
 <script src="/__apf/apf.js"></script>
 ```
 
-[Example 07](07-gui.md) is a complete working editor.
+[Example 07](07-gui.md) is a complete working web view.
 
 ## Bindings without code
 
@@ -38,7 +38,7 @@ Put an attribute on an element and it follows a parameter in both directions:
 <output data-param-text="gain"></output>        <!-- its value as text: "-6.0 dB" -->
 <small data-param-cc="gain"></small>            <!-- the MIDI controller learned for it -->
 <div data-apf-presets></div>                    <!-- a preset bar -->
-<div data-apf-resize-grip></div>                <!-- a corner grip for resizable editors -->
+<div data-apf-resize-grip></div>                <!-- a corner grip for resizable web views -->
 ```
 
 The value of `data-param` must be a parameter's key. (Example 07 has a unit test that checks
@@ -90,20 +90,20 @@ returned object from your own input handlers to bring it back to fast. Returning
 of `true` means minor activity (a blinking light): the poll stays at the `light` rate, which
 you can set. APF's own value polling uses the same helper.
 
-## Resizable editors
+## Resizable web views
 
 ```rust,ignore
-WebEditor::new(1280, 800, UI).resizable(true).size_limits((320, 200), (2400, 1600))
+WebView::new(1280, 800, UI).resizable(true).size_limits((320, 200), (2400, 1600))
 ```
 
 Lay the page out for any size (`100vw` and `100vh`, flex or grid). The size the user chose is
-saved with the session and a new editor opens at it. Some hosts give the window no resize
+saved with the session and a new web view opens at it. Some hosts give the window no resize
 edge (Logic's Audio Unit v3 windows): the page's own `<div data-apf-resize-grip></div>` covers
 them, or call `apf.resize(w, h)`.
 
 ## Keys
 
-While the editor has the focus the web view receives every key. A key the page does not claim
+While the web view has the focus it receives every key. A key the page does not claim
 goes on to the host, so the space bar still starts playback. To take shortcuts for yourself:
 `apf.keys.claim(["cmd+d", "backspace"])`, and call `preventDefault()` in the handler for the
 ones you handle.
@@ -115,7 +115,7 @@ ones you handle.
 - Inside a host, [hot reload](hot-reload.md) rebuilds and swaps in the whole plugin, page and
   Rust code together, without closing the host.
 - `apf.log(...)` writes a line to the plugin's stderr, since hosts show no web console.
-- `apf-host --gui-test` opens the editor in a window and drives it end to end, and
+- `apf-host --gui-test` opens the web view in a window and drives it end to end, and
   `apf-host --gui 3 --screenshot out.png` writes a picture of it
   ([Testing](testing.md)).
 
@@ -123,4 +123,4 @@ A page is an ordinary page: use your own CSS, canvas, SVG or any library you bun
 assets. Keep it self-contained, without network access: a plugin must work offline, and a
 host's sandbox may forbid it.
 
-The [editor reference](editor-reference.md) lists every attribute and script function.
+The [web view reference](web-view-reference.md) lists every attribute and script function.

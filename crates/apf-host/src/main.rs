@@ -6,19 +6,19 @@
 //!
 //! * always: scans the plugin, lists its parameters, renders two seconds of a chord and
 //!   reports level and validity of the output (optionally written to a WAV file);
-//! * `--gui-test`: opens the editor in a window and drives the web UI end to end (UI edit →
+//! * `--gui-test`: opens the web view in a window and drives the web UI end to end (UI edit →
 //!   host automation events, host automation → UI → edit back), without anyone at the screen
-//!   (a plugin without an editor skips it);
-//! * `--gui SECONDS`: just shows the editor that long (to look at it);
-//! * `--screenshot out.png`: a picture of the editor's web page (WebKit's own snapshot, so it
-//!   works behind a locked screen; a window capture for editors without a webview, and on
+//!   (a plugin without a web view skips it);
+//! * `--gui SECONDS`: just shows the web view that long (to look at it);
+//! * `--screenshot out.png`: a picture of the web view's web page (WebKit's own snapshot, so it
+//!   works behind a locked screen; a window capture for web views without a webview, and on
 //!   Windows);
-//! * `--parent-in-window`: give the editor a view that is in the window already (REAPER's
+//! * `--parent-in-window`: give the web view a view that is in the window already (REAPER's
 //!   CLAP and VST3 hosts) instead of one put there afterwards (Logic and other AU hosts).
 //! * `--hot-test <folder>`: the plugin is the hot-reload shell (`cargo xtask bundle --hot`)
-//!   and `<folder>` its publish folder: plays a held chord with the editor open, publishes a
+//!   and `<folder>` its publish folder: plays a held chord with the web view open, publishes a
 //!   copy of the current build as a new one, and checks that the shell swaps it in while
-//!   blocks keep coming — the parameter set before kept, the editor open again, sound after.
+//!   blocks keep coming — the parameter set before kept, the web view open again, sound after.
 //!   With `--hot-wait SECONDS` it publishes nothing and waits that long for a build published
 //!   from outside (`cargo xtask hot`), to compare the sound of two different builds.
 
@@ -87,7 +87,7 @@ unsafe extern "C" fn host_true(_h: *const clap_host) -> bool {
     true
 }
 unsafe extern "C" fn host_closed(_h: *const clap_host, _destroyed: bool) {}
-/// The last size the editor asked for (width << 32 | height), 0 for none. Refused: the test
+/// The last size the web view asked for (width << 32 | height), 0 for none. Refused: the test
 /// only checks that the request arrives.
 static RESIZE_REQUEST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -470,7 +470,7 @@ fn write_wav(path: &Path, channels: &[Vec<f32>], sr: u32) -> std::io::Result<()>
 
 // --- GUI ---------------------------------------------------------------------------------------
 
-/// The script `--gui-test` injects into the editor's page (through `APF_UI_INJECT_JS`):
+/// The script `--gui-test` injects into the web view's page (through `APF_UI_INJECT_JS`):
 /// it moves parameter 0 to its maximum like a user would, then waits for the host to set
 /// parameter 1 to its maximum and answers by moving parameter 2 to its minimum — but only
 /// after the webview delivered two POST bodies intact to the plugin (`/__apf/echo`): a 1 MiB
@@ -497,7 +497,7 @@ const GUI_TEST_JS: &str = r#"
     apf.on(b.key, async (v) => {
       if (answered || v <= 0.999) return;
       answered = true;
-      // A resizable editor asks the host for a size itself (apf.resize, the grip): far beyond
+      // A resizable web view asks the host for a size itself (apf.resize, the grip): far beyond
       // its limits, so the request shows the clamping.
       if (apf.sizeLimits) apf.resize(100000, 1);
       if (await postsArrive().catch((e) => (apf.log(`gui-test: POST failed: ${e}`), false))) {
@@ -532,16 +532,16 @@ mod gui {
     use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSView, NSWindow, NSWindowStyleMask};
     use objc2_foundation::{NSDate, NSPoint, NSRect, NSRunLoop, NSSize, NSString};
 
-    /// Key events that reached the host past the editor: ("down" | "up" | "flags", key code).
+    /// Key events that reached the host past the web view: ("down" | "up" | "flags", key code).
     pub static HOST_KEYS: Mutex<Vec<(&str, u16)>> = Mutex::new(Vec::new());
 
     objc2::define_class!(
-        /// The view the editor is given, standing in for the host's views around it: a key the
+        /// The view the web view is given, standing in for the host's views around it: a key the
         /// page leaves goes up the responder chain to it, as to a DAW's key handling (Logic's
         /// key commands and Musical Typing).
         #[unsafe(super(NSView, objc2_app_kit::NSResponder, objc2::runtime::NSObject))]
         #[thread_kind = objc2::MainThreadOnly]
-        #[name = "ApfHostEditorView"]
+        #[name = "ApfHostParentView"]
         struct HostView;
 
         impl HostView {
@@ -564,7 +564,7 @@ mod gui {
 
     pub struct Window {
         pub window: Retained<NSWindow>,
-        /// The view the editor was given.
+        /// The view the web view was given.
         pub view: Retained<NSView>,
     }
 
@@ -616,9 +616,9 @@ mod gui {
         window.makeKeyAndOrderFront(None);
         window.orderFrontRegardless();
         // WebKit suspends the page of a webview whose window WindowServer reports occluded
-        // (~3 s later, and the editor goes blank): a locked screen, and on 2026-10-24 every
+        // (~3 s later, and the web view goes blank): a locked screen, and on 2026-10-24 every
         // new window on the dev Mac although it was in front. A test must not depend on it:
-        // turn the detection off in the editor's webviews (WebKit SPI, the test host only).
+        // turn the detection off in the plugin's webviews (WebKit SPI, the test host only).
         pump(Duration::from_millis(50));
         let occluded = !window.occlusionState().contains(objc2_app_kit::NSWindowOcclusionState::Visible);
         let webviews = keep_webviews_awake(&view);
@@ -626,17 +626,17 @@ mod gui {
         let subviews = view.subviews().len();
         println!("gui:        attached, {} subview(s) in the host view", subviews);
         if subviews == 0 {
-            return Err("the editor added no view to the host's window".into());
+            return Err("the web view added no view to the host's window".into());
         }
         Ok(Window { window, view })
     }
 
-    /// Resize the editor as a host does when the user drags the window's edge: ask the
-    /// plugin to adjust the size, then resize the window and the editor's view and call
+    /// Resize the web view as a host does when the user drags the window's edge: ask the
+    /// plugin to adjust the size, then resize the window and the plugin's view and call
     /// `set_size` — in this order (clap-wrapper's AUv2 and VST3), or `set_size` first
     /// (`size_first`, as REAPER's CLAP host does). `ignore_limits`: give the window the size
     /// asked for even where `adjust_size` disagrees (REAPER lets a window get smaller than the
-    /// editor's minimum). Returns the size the editor took and the frame its view ended with.
+    /// web view's minimum). Returns the size the web view took and the frame its view ended with.
     pub unsafe fn resize(
         loaded: &Loaded,
         w: &Window,
@@ -668,7 +668,7 @@ mod gui {
             return Err(format!("gui.get_size says {gw} x {gh} after set_size({aw}, {ah})"));
         }
         let sub = w.view.subviews();
-        let frame = sub.firstObject().ok_or("the editor's view is gone")?.frame();
+        let frame = sub.firstObject().ok_or("the plugin's view is gone")?.frame();
         Ok(((aw, ah), (frame.size.width, frame.size.height)))
     }
 
@@ -710,8 +710,8 @@ mod gui {
         }
     }
 
-    /// Write a PNG of the editor's web page (`WKWebView takeSnapshot`); `None` when the
-    /// editor has no webview.
+    /// Write a PNG of the web view's web page (`WKWebView takeSnapshot`); `None` when the
+    /// web view has no webview.
     pub fn snapshot_webview(w: &Window, path: &Path) -> Option<Result<()>> {
         use objc2::runtime::AnyObject;
         use std::cell::RefCell;
@@ -784,7 +784,7 @@ mod gui {
         pump(Duration::from_millis(50));
     }
 
-    /// Press a key in the editor's window as the keyboard would: the event goes through this
+    /// Press a key in the web view's window as the keyboard would: the event goes through this
     /// process's event queue (and so through every key monitor), not to any other app.
     pub unsafe fn press(w: &Window, chars: &str, key_code: u16, cmd: bool) {
         use objc2_app_kit::{NSEventModifierFlags, NSEventType};
@@ -793,7 +793,7 @@ mod gui {
         key(w, NSEventType::KeyUp, chars, key_code, flags);
     }
 
-    /// One key event (a key-down, key-up or modifier change) into the editor's window, the
+    /// One key event (a key-down, key-up or modifier change) into the web view's window, the
     /// keyboard focus in the page as a click would put it.
     pub unsafe fn key(w: &Window, kind: objc2_app_kit::NSEventType, chars: &str, key_code: u16, flags: objc2_app_kit::NSEventModifierFlags) {
         use objc2_app_kit::NSEvent;
@@ -802,7 +802,7 @@ mod gui {
             w.window.makeFirstResponder(Some(&web));
         }
         let s = NSString::from_str(chars);
-        // Real timestamps: the editor tells WebKit's hand-back of a key from a new press by them.
+        // Real timestamps: the web view tells WebKit's hand-back of a key from a new press by them.
         let at = objc2_foundation::NSProcessInfo::processInfo().systemUptime();
         if let Some(e) = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
             kind,
@@ -890,13 +890,13 @@ mod gui {
         }
     }
 
-    /// Show the editor for `duration` (`--gui`).
+    /// Show the web view for `duration` (`--gui`).
     pub fn linger(duration: Duration) {
         pump(duration);
     }
 
     /// The web page itself, as WebKit draws it: works behind a locked screen and without the
-    /// screen-recording permission. A Rust editor has no webview: the window then.
+    /// screen-recording permission. A Rust web view has no webview: the window then.
     pub fn screenshot(w: &Window, path: &Path) -> Result<&'static str> {
         match snapshot_webview(w, path) {
             Some(Ok(())) => Ok("webview snapshot"),
@@ -947,7 +947,7 @@ mod gui {
     }
 
     thread_local! {
-        /// The open editor, for what the window does on its own: the user dragging its edge,
+        /// The open web view, for what the window does on its own: the user dragging its edge,
         /// a move to a monitor of another DPI.
         static HOSTED: Cell<Option<(*const clap_plugin, &'static clap_plugin_gui)>> = const { Cell::new(None) };
         /// The host is sizing the window itself (`resize`): its WM_SIZE is not the user's.
@@ -961,7 +961,7 @@ mod gui {
 
     /// Before the plugin is loaded. Per-monitor DPI awareness: window sizes in physical pixels,
     /// as a DAW has them. For `--gui-test` also WebView2's DevTools port on loopback (read by
-    /// WebView2 when the editor creates its browser): the test types keys into the page
+    /// WebView2 when the web view creates its browser): the test types keys into the page
     /// through it — the browser's own input path, trusted events — without touching the
     /// keyboard and focus of whoever sits at this computer.
     pub fn prepare(test: bool) {
@@ -1013,7 +1013,7 @@ mod gui {
         };
         // 0 also when it is registered already (a second window in this process).
         RegisterClassExW(&class);
-        // A fixed-size editor gets a window the user cannot resize either.
+        // A fixed-size web view gets a window the user cannot resize either.
         let style = if resizable { WS_OVERLAPPEDWINDOW } else { WS_OVERLAPPEDWINDOW & !(WS_THICKFRAME | WS_MAXIMIZEBOX) };
         let wide: Vec<u16> = title.encode_utf16().chain([0]).collect();
         let hwnd = CreateWindowExW(
@@ -1056,12 +1056,12 @@ mod gui {
         // Shown without taking the focus from whatever the user is working in.
         let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         pump(Duration::from_millis(50));
-        match (webview_of(hwnd), editor_child(hwnd)) {
-            (Some(_), _) => println!("gui:        attached, the editor's webview window (WRY_WEBVIEW) is a child of the host window"),
-            (None, Some(_)) => println!("gui:        attached, the editor added a child window (no webview)"),
+        match (webview_of(hwnd), view_child(hwnd)) {
+            (Some(_), _) => println!("gui:        attached, the web view's window (WRY_WEBVIEW) is a child of the host window"),
+            (None, Some(_)) => println!("gui:        attached, the web view added a child window (no webview)"),
             (None, None) => {
                 close(loaded, window);
-                return Err("the editor added no window to the host's window".into());
+                return Err("the web view added no window to the host's window".into());
             }
         }
         Ok(window)
@@ -1073,12 +1073,12 @@ mod gui {
                 HOST_KEYS.lock().unwrap().push((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN, wparam.0 as u32));
                 return LRESULT(0);
             }
-            // The editor goes before its window: `close` destroys both, in that order.
+            // The web view goes before its window: `close` destroys both, in that order.
             WM_CLOSE => {
                 CLOSE_ASKED.store(true, Ordering::Relaxed);
                 return LRESULT(0);
             }
-            // An editor may be larger than the screen (a test asks for that); Windows keeps
+            // A web view may be larger than the screen (a test asks for that); Windows keeps
             // windows within it otherwise.
             WM_GETMINMAXINFO => {
                 let result = DefWindowProcW(hwnd, msg, wparam, lparam);
@@ -1087,7 +1087,7 @@ mod gui {
                 }
                 return result;
             }
-            // The user dragged the window's edge: as a host does, the editor gets the size it
+            // The user dragged the window's edge: as a host does, the web view gets the size it
             // agrees to.
             WM_SIZE if !SIZING.get() => {
                 let (w, h) = ((lparam.0 & 0xffff) as u32, ((lparam.0 >> 16) & 0xffff) as u32);
@@ -1099,7 +1099,7 @@ mod gui {
                     }
                 }
             }
-            // Moved to a monitor of another DPI: the editor's new scale, then its new size, at
+            // Moved to a monitor of another DPI: the web view's new scale, then its new size, at
             // the place Windows suggests.
             WM_DPICHANGED => {
                 if let (Some((plugin, gui)), Some(suggested)) = (HOSTED.get(), (lparam.0 as *const RECT).as_ref()) {
@@ -1141,21 +1141,21 @@ mod gui {
         unsafe { FindWindowExW(Some(hwnd), None, w!("WRY_WEBVIEW"), PCWSTR::null()) }.ok()
     }
 
-    /// The editor's window: its webview, else whatever child window it added.
-    fn editor_child(hwnd: HWND) -> Option<HWND> {
+    /// The web view's window: its webview, else whatever child window it added.
+    fn view_child(hwnd: HWND) -> Option<HWND> {
         // SAFETY: a window lookup.
         webview_of(hwnd).or_else(|| unsafe { GetWindow(hwnd, GW_CHILD) }.ok())
     }
 
-    /// Host pixels per logical pixel: the window's DPI, which the editor was given.
+    /// Host pixels per logical pixel: the window's DPI, which the web view was given.
     pub fn scale(w: &Window) -> f64 {
         // SAFETY: a getter on our window.
         let dpi = unsafe { GetDpiForWindow(w.hwnd) };
         if dpi == 0 { 1.0 } else { dpi as f64 / 96.0 }
     }
 
-    /// Resize the editor as a host does when the user drags the window's edge (see the macOS
-    /// `resize`); sizes in physical pixels. Returns the size the editor took and the client
+    /// Resize the web view as a host does when the user drags the window's edge (see the macOS
+    /// `resize`); sizes in physical pixels. Returns the size the web view took and the client
     /// size its window ended with.
     pub unsafe fn resize(
         loaded: &Loaded,
@@ -1186,12 +1186,12 @@ mod gui {
         } else if (gw, gh) != (aw, ah) {
             return Err(format!("gui.get_size says {gw} x {gh} after set_size({aw}, {ah})"));
         }
-        let child = editor_child(w.hwnd).ok_or("the editor's window is gone")?;
+        let child = view_child(w.hwnd).ok_or("the web view's window is gone")?;
         let (fw, fh) = client_size(child);
         Ok(((aw, ah), (fw as f64, fh as f64)))
     }
 
-    /// Run the message loop for `duration`: the editor's webview lives on this thread's
+    /// Run the message loop for `duration`: the web view lives on this thread's
     /// messages (its IPC from the browser process among them).
     pub fn pump(duration: Duration) {
         let until = Instant::now() + duration;
@@ -1212,7 +1212,7 @@ mod gui {
         }
     }
 
-    /// Show the editor for `duration` (`--gui`), or until the window's close box is clicked.
+    /// Show the web view for `duration` (`--gui`), or until the window's close box is clicked.
     pub fn linger(duration: Duration) {
         let until = Instant::now() + duration;
         while Instant::now() < until && !CLOSE_ASKED.load(Ordering::Relaxed) {
@@ -1304,7 +1304,7 @@ mod gui {
     }
 
     /// A key the page does not take goes on to the host's window (apf.js hands it back, so the
-    /// host's own shortcuts work over the editor): Ctrl+S here. The keys the page took
+    /// host's own shortcuts work over the web view): Ctrl+S here. The keys the page took
     /// (Ctrl+D, Backspace) must not arrive.
     pub fn unclaimed_key_reaches_host(w: &Window) -> Result<()> {
         type_key(w, 2, 0x53, "KeyS", "s")?;
@@ -1331,14 +1331,14 @@ mod gui {
     /// The window's client area as it is on screen, the webview's composition included
     /// (PrintWindow with PW_RENDERFULLCONTENT: works while other windows cover it), as a PNG.
     pub fn screenshot(w: &Window, path: &Path) -> Result<&'static str> {
-        // An editor just opened may not have drawn its page yet.
+        // A web view just opened may not have drawn its page yet.
         let ready = w.opened + Duration::from_secs(3);
         if Instant::now() < ready {
             pump(ready - Instant::now());
         }
         let (width, height, rgb) = capture(w.hwnd)?;
         if rgb.chunks_exact(3).all(|p| p == &rgb[..3]) {
-            return Err(format!("the {width} x {height} capture is a single colour: the editor drew nothing"));
+            return Err(format!("the {width} x {height} capture is a single colour: the web view drew nothing"));
         }
         std::fs::write(path, png(width, height, &rgb)).map_err(|e| format!("{}: {e}", path.display()))?;
         Ok("window capture")
@@ -1439,7 +1439,7 @@ mod gui {
         out
     }
 
-    /// A DevTools Protocol connection to the editor's page: a WebSocket on loopback, text
+    /// A DevTools Protocol connection to the web view's page: a WebSocket on loopback, text
     /// frames of JSON.
     struct DevTools {
         stream: TcpStream,
@@ -1603,8 +1603,8 @@ enum TestKey {
 unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, test: bool, screenshot: Option<&Path>, in_window: bool) -> Result<()> {
     let params = loaded.param_infos();
     if test && loaded.gui.is_none() {
-        // A plugin without an editor has nothing to drive; its render check above still ran.
-        println!("gui-test:   skipped, the plugin has no editor");
+        // A plugin without a web view has nothing to drive; its render check above still ran.
+        println!("gui-test:   skipped, the plugin has no web view");
         return Ok(());
     }
     if test && params.len() < 3 {
@@ -1655,7 +1655,7 @@ unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, test: bool, screenshot:
                 }
             }
         }
-        println!("gui-test:   events from the editor: {}", seen.join("; "));
+        println!("gui-test:   events from the web view: {}", seen.join("; "));
         println!("gui-test:   flush requests from the plugin: {}", FLUSH_REQUESTS.load(Ordering::Relaxed));
         // What the page asked with apf.resize, before the round trip's end; apf.maximize asks
         // again later.
@@ -1690,7 +1690,7 @@ unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, test: bool, screenshot:
                     loaded.text(a.id, got[0]),
                     loaded.text(a.id, got[1])
                 );
-                // A resizable editor then asked for the whole screen (apf.maximize).
+                // A resizable web view then asked for the whole screen (apf.maximize).
                 if resizable {
                     let before = page_resize;
                     let start = Instant::now();
@@ -1714,7 +1714,7 @@ unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, test: bool, screenshot:
                 }
             }
         }
-        // A resizable editor must follow the host's window, within its own limits.
+        // A resizable web view must follow the host's window, within its own limits.
         if result.is_ok() && resizable {
             let asked = page_resize;
             if asked == 0 {
@@ -1732,9 +1732,9 @@ unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, test: bool, screenshot:
                 };
                 match gui::resize(loaded, &window, w, h, size_first, ignore_limits) {
                     Ok(((aw, ah), (fw, fh))) => {
-                        println!("gui-test:   resized to {w} x {h} ({order}): the editor took {aw} x {ah}, its view is {fw} x {fh}");
+                        println!("gui-test:   resized to {w} x {h} ({order}): the web view took {aw} x {ah}, its view is {fw} x {fh}");
                         if (fw, fh) != (aw as f64, ah as f64) {
-                            result = Err(format!("the editor's view did not follow a resize to {aw} x {ah}"));
+                            result = Err(format!("the plugin's view did not follow a resize to {aw} x {ah}"));
                         }
                     }
                     Err(e) => result = Err(e),
@@ -1902,9 +1902,9 @@ unsafe fn hot_test(loaded: &Loaded, dir: &Path, wait: Option<f64>) -> Result<()>
     if let Some(w) = window {
         gui::pump(Duration::from_millis(300));
         let view_after = w.view.subviews().firstObject().map(|v| objc2::rc::Retained::as_ptr(&v) as usize);
-        println!("hot-test:   editor views in the host's view after the reload: {}", w.view.subviews().len());
+        println!("hot-test:   plugin views in the host's view after the reload: {}", w.view.subviews().len());
         if view_after.is_none() || view_after == view_before {
-            return Err("the editor was not opened again in the host's view".into());
+            return Err("the web view was not opened again in the host's view".into());
         }
         gui::close(loaded, w);
     }

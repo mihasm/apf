@@ -105,7 +105,7 @@ crate then builds in a few seconds. The DSP is a little slower than in a shipped
 
 ## What reloads and what does not
 
-Everything in the plugin's code reloads: sound, MIDI handling, the editor page and its files,
+Everything in the plugin's code reloads: sound, MIDI handling, the web view page and its files,
 presets and the controller.
 
 Some things a host reads only when it scans or creates the plugin. A change to these needs

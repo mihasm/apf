@@ -8,7 +8,7 @@
 //     --state FILE        restore this state instead of A's edits: a .vstpreset or the raw
 //                         component state a host saved
 //     --save-state FILE   write A's state as a .vstpreset
-//     --editor            also run every scenario with the editor opened (off screen) and
+//     --view            also run every scenario with the view opened (off screen) and
 //                         closed again between the restore and the notes
 //     --wav DIR           write the renders as 32-bit float WAVs
 //     --inject-stale      check the check: after every restore the host sends the processor
@@ -126,7 +126,7 @@ std::string str(const TChar* s) { return Steinberg::Vst::StringConvert::convert(
 
 // --- the host's side of the plug-in -----------------------------------------------------------
 
-/// What a host gives the controller: edits from the plug-in (its editor, a preset it loaded)
+/// What a host gives the controller: edits from the plug-in (its view, a preset it loaded)
 /// reach the processor as parameter changes in the next block, as in any host.
 class Handler : public U::Implements<U::Directly<IComponentHandler>>
 {
@@ -713,7 +713,7 @@ int main(int argc, char* argv[])
     if (args.empty() || args[0].rfind("--", 0) == 0)
     {
         std::printf("usage: vst3-state-check <Plugin.vst3> [--preset-program N | --preset NAME] [--state FILE]\n"
-                    "                        [--save-state FILE] [--editor] [--wav DIR] [--inject-stale]\n");
+                    "                        [--save-state FILE] [--view] [--wav DIR] [--inject-stale]\n");
         return 2;
     }
     const std::string path = args[0];
@@ -722,7 +722,7 @@ int main(int argc, char* argv[])
     const std::string stateFile = option("--state");
     const std::string saveFile = option("--save-state");
     const std::string wavDir = option("--wav");
-    const bool editor = flag("--editor");
+    const bool view = flag("--view");
     const bool injectStale = flag("--inject-stale");
 
     platform::init();
@@ -993,9 +993,9 @@ int main(int argc, char* argv[])
         bool sameHistory = false;
         std::vector<double> shown;
         State resaved;
-        std::string editorNote;
+        std::string viewNote;
     };
-    auto run = [&](const Restore& restore, bool withEditor) {
+    auto run = [&](const Restore& restore, bool withView) {
         Result r;
         auto b = make();
         restore(*b);
@@ -1003,16 +1003,16 @@ int main(int argc, char* argv[])
             for (auto& p : cat.params)
                 if (cat.editable(p)) b->queue(p.id, p.defaultValue);
         platform::pump(0.3);
-        if (withEditor)
+        if (withView)
         {
             IPtr<IPlugView> view = owned(b->controller->createView(ViewType::kEditor));
             if (!view)
-                r.editorNote = "no editor";
+                r.viewNote = "no view";
             else
             {
                 auto frame = owned(new Frame);
-                if (!platform::showEditor(view, frame, 2.0, r.editorNote) && r.editorNote.empty())
-                    r.editorNote = "the editor did not open";
+                if (!platform::showView(view, frame, 2.0, r.viewNote) && r.viewNote.empty())
+                    r.viewNote = "the view did not open";
             }
         }
         b->renderUntil(std::max(kNotesAt, b->rendered / kBlock + kSettle));
@@ -1101,26 +1101,26 @@ int main(int argc, char* argv[])
             text += "; vs " + s.twinName + ": " + d;
             if (!same) problems.push_back("differs from " + s.twinName);
         }
-        if (editor)
+        if (view)
         {
             Result e = run(s.restore, true);
-            if (!e.editorNote.empty())
+            if (!e.viewNote.empty())
             {
-                text += "; editor: " + e.editorNote;
-                problems.push_back("editor: " + e.editorNote);
+                text += "; view: " + e.viewNote;
+                problems.push_back("view: " + e.viewNote);
             }
             else
             {
                 std::string d;
                 bool same = alike(b.sound, e.sound, d);
                 auto staleOpened = staleValues(e.shown, expectValues);
-                text += "; editor closed/opened: " + d;
-                if (!staleOpened.empty()) text += ", " + std::to_string(staleOpened.size()) + " stale with the editor";
-                if (!same) problems.push_back("the editor changes the sound");
-                if (!staleOpened.empty()) problems.push_back("stale values with the editor");
+                text += "; view closed/opened: " + d;
+                if (!staleOpened.empty()) text += ", " + std::to_string(staleOpened.size()) + " stale with the view";
+                if (!same) problems.push_back("the view changes the sound");
+                if (!staleOpened.empty()) problems.push_back("stale values with the view");
             }
             if (!wavDir.empty())
-                writeWav(wavDir + "/B" + std::to_string(index) + "-" + slug(s.name) + "-editor.wav", e.sound);
+                writeWav(wavDir + "/B" + std::to_string(index) + "-" + slug(s.name) + "-view.wav", e.sound);
         }
         if (!wavDir.empty()) writeWav(wavDir + "/B" + std::to_string(index) + "-" + slug(s.name) + ".wav", b.sound);
 

@@ -1,5 +1,5 @@
 //! Controllers: a plugin's own main-thread object for session state beyond its parameters,
-//! and for a channel between the plugin and its editor.
+//! and for a channel between the plugin and its view.
 //!
 //! A plugin returns one from [`crate::Plugin::controller`]. The framework then
 //!
@@ -10,12 +10,12 @@
 //!   stay readable) and loads it with the preset, after the parameters; a preset without it
 //!   calls `reset`. A preset counts as changed when the text differs from the preset's;
 //!   [`Controller::revision`] tells the framework when to look again;
-//! * routes the web editor's `GET`/`POST /__apf/plugin/<path>?<query>` to
-//!   [`Controller::request`] (`apf.plugin.get/post` in `apf.js`), and gives Rust editors the
-//!   controller through [`crate::EditorContext::controller`].
+//! * routes the web view's `GET`/`POST /__apf/plugin/<path>?<query>` to
+//!   [`Controller::request`] (`apf.plugin.get/post` in `apf.js`), and gives Rust views the
+//!   controller through [`crate::ViewContext::controller`].
 //!
 //! Threading: the methods are called from the host's main thread (CLAP's rule, and the
-//! editor's requests arrive there) and may allocate and lock; the audio thread never calls
+//! view's requests arrive there) and may allocate and lock; the audio thread never calls
 //! them. They are not serialised by the framework, though: Audio Unit hosts save and restore
 //! state from other threads too (clap-wrapper's AUv2 `SaveState` and AUv3 `fullState` run on
 //! whatever thread the host uses), so a controller guards its state with its own lock, as a
@@ -26,10 +26,10 @@
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 
-use crate::editor::{EditorContext, Shared};
+use crate::view::{ViewContext, Shared};
 use crate::param::Params;
 
-/// A request from the editor to the plugin.
+/// A request from the view to the plugin.
 #[derive(Debug, Clone, Copy)]
 pub struct ControllerRequest<'a> {
     /// `"GET"`, `"POST"`, ...
@@ -97,7 +97,7 @@ impl ControllerResponse {
     }
 }
 
-/// A plugin's main-thread object for extra session state and its editor's requests. See the
+/// A plugin's main-thread object for extra session state and its view's requests. See the
 /// [module documentation](self).
 pub trait Controller: Send + Sync + 'static {
     /// The extra state as text (JSON in practice): saved with the session and in presets.
@@ -113,11 +113,11 @@ pub trait Controller: Send + Sync + 'static {
     fn reset(&self);
 
     /// A number that changes whenever what `save` would return changes (a counter bumped by
-    /// every edit, load and reset). Must be cheap: the editor's preset display asks for it
+    /// every edit, load and reset). Must be cheap: the view's preset display asks for it
     /// many times a second, and calls `save` only when it changed.
     fn revision(&self) -> u64;
 
-    /// A request of the editor to `/__apf/plugin/<path>`. The default answers 404.
+    /// A request of the view to `/__apf/plugin/<path>`. The default answers 404.
     fn request(&self, _request: &ControllerRequest) -> ControllerResponse {
         ControllerResponse::not_found()
     }
@@ -180,18 +180,18 @@ impl HostHandle {
         }
     }
 
-    /// The context the editor's edits go through, on the main thread only: they share one
+    /// The context the view's edits go through, on the main thread only: they share one
     /// single-producer queue to the audio side.
-    fn edits(&self) -> Option<EditorContext> {
+    fn edits(&self) -> Option<ViewContext> {
         let shared = self.shared()?;
         let main = shared.host.get().is_none_or(|h| h.is_main_thread());
-        main.then_some(EditorContext { shared })
+        main.then_some(ViewContext { shared })
     }
 
     /// Start a host gesture on parameter `index` (the user took hold of a control), so the
     /// host records the values that follow as automation; [`Self::set_param`] moves it,
     /// [`Self::end_edit`] lets go. The events reach the host from the next `process` or
-    /// `flush`, exactly like the editor's edits (the same queue). E.g. a knob in the patch
+    /// `flush`, exactly like the view's edits (the same queue). E.g. a knob in the patch
     /// mapped to a macro parameter: begin when its drag starts, set on every move, end when
     /// it is released.
     ///
@@ -229,7 +229,7 @@ impl HostHandle {
         })
     }
 
-    fn edit(&self, index: usize, f: impl FnOnce(&EditorContext)) -> bool {
+    fn edit(&self, index: usize, f: impl FnOnce(&ViewContext)) -> bool {
         if index >= self.params.len() {
             return false;
         }

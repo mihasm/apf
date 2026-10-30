@@ -92,7 +92,7 @@ Hardware controllers with knobs reach a plugin in three ways, from the most auto
 - **CLAP hosts** that implement the remote-controls extension use the plugin's remote-control
   pages (`Plugin::REMOTE_CONTROLS`, pages of eight parameter keys; without pages, the first
   eight parameters are used). Not yet checked in such a host.
-- **Anything else: MIDI learn** in the web editor. Right-click a control, choose MIDI learn,
+- **Anything else: MIDI learn** in the web view. Right-click a control, choose MIDI learn,
   move a knob. That controller (on any channel) moves the parameter from then on, in every
   format, as a host gesture that hosts record as automation. Mappings are saved with the
   session. A learned controller never reaches `event`: the framework applies it first.

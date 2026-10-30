@@ -1,6 +1,6 @@
 # Windows
 
-APF builds CLAP and VST3 plugins for Windows (x64). The web editor uses WebView2. Audio Units
+APF builds CLAP and VST3 plugins for Windows (x64). The web view uses WebView2. Audio Units
 do not exist on Windows. The standalone app is not verified on Windows.
 
 ## What you need
@@ -32,19 +32,19 @@ has built in). A host that has the plugin loaded keeps the file locked. In cmd, 
 - Ninja is used only inside a Visual Studio developer shell (it needs `cl.exe` on the
   `PATH`); otherwise CMake's Visual Studio generator is used, which finds the compiler by
   itself.
-- Editor sizes stay logical pixels for the plugin. The framework converts them to the physical
+- Web view sizes stay logical pixels for the plugin. The framework converts them to the physical
   pixels the host's window uses, with `gui.set_scale` (VST3 hosts: through clap-wrapper) or
-  else the window's DPI. The session keeps the logical size, so an editor opens alike at
+  else the window's DPI. The session keeps the logical size, so a web view opens alike at
   another scale or on a Mac.
 - WebView2's user data lives in `%LOCALAPPDATA%\<vendor>\<plugin>\WebView2`. Its default,
   beside the host's executable, is not writable. Browser keys (F5 reload, Ctrl+F find, zoom)
   are off, and so is the browser's context menu outside debug builds.
-- Keys: WebView2 gets every key while the editor has the focus, and the host none. A key the
+- Keys: WebView2 gets every key while the web view has the focus, and the host none. A key the
   page did not claim (`apf.keys.claim`), or claimed but did not take (`preventDefault`), goes
-  on to the host's window, so the host's own shortcuts work over the editor (the space bar
+  on to the host's window, so the host's own shortcuts work over the web view (the space bar
   plays and stops in REAPER). Keys typed into text fields stay in the page. "cmd" in a claim
   means Ctrl.
-- A resizable editor follows the host's window (its client area, within the editor's limits)
+- A resizable web view follows the host's window (its client area, within the web view's limits)
   whether or not the host calls `set_size`. `fit_screen` and `apf.maximize` measure the
   monitor's work area less the window frame.
 - `apf-host --gui-test` types its keys into the page through WebView2's DevTools port (no

@@ -1,6 +1,6 @@
 [package]
 name = "tuning-demo"
-description = "A microtuned sine synth: shows a plugin controller (session state beyond parameters, editor requests)"
+description = "A microtuned sine synth: shows a plugin controller (session state beyond parameters, web view requests)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

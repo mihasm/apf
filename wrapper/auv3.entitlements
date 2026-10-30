@@ -9,7 +9,7 @@
     <true/>
     <!-- WebKit's helper processes (GPU, Networking) exit at once in a sandbox without this
          ("Application does not have permission to communicate with network resources"),
-         even though the editor loads nothing from the network. Without it the web editor
+         even though the web view loads nothing from the network. Without it the web view
          stays blank. -->
     <key>com.apple.security.network.client</key>
     <true/>

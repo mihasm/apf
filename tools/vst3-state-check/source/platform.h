@@ -1,5 +1,5 @@
 // vst3-state-check — what differs per operating system: the host's main-thread event loop
-// (plug-ins defer work to it: clap-wrapper's idle timer runs on it) and a window for the editor.
+// (plug-ins defer work to it: clap-wrapper's idle timer runs on it) and a window for the view.
 #pragma once
 
 #include "pluginterfaces/gui/iplugview.h"
@@ -16,7 +16,7 @@ void pump(double seconds);
 
 /// Open `view` in a window nobody sees (off screen), run the event loop for `seconds`, close
 /// it. False with `error` set when this platform has no implementation.
-bool showEditor(Steinberg::IPlugView* view, Steinberg::IPlugFrame* frame, double seconds,
+bool showView(Steinberg::IPlugView* view, Steinberg::IPlugFrame* frame, double seconds,
                 std::string& error);
 
 } // namespace platform

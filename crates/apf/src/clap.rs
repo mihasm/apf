@@ -37,7 +37,7 @@ use clap_sys::stream::*;
 use clap_sys::version::CLAP_VERSION;
 
 use crate::controller::HostHandle;
-use crate::editor::{ControllerSlot, Editor, EditorContext, HostLink, ParentWindow, Shared, UiMsg};
+use crate::view::{ControllerSlot, View, ViewContext, HostLink, ParentWindow, Shared, UiMsg};
 use crate::param::{self, ParamKind, Params};
 use crate::plugin::*;
 use crate::preset::{self, Source};
@@ -360,7 +360,7 @@ struct AudioState {
 const CC_GESTURE_SECONDS: f64 = 0.3;
 
 struct GuiState {
-    editor: Option<Box<dyn Editor>>,
+    view: Option<Box<dyn View>>,
     open: bool,
 }
 
@@ -402,7 +402,7 @@ impl<P: Plugin> Instance<P> {
                 active: false,
                 touch: vec![0; P::PARAMS.len()].into_boxed_slice(),
             }),
-            gui: UnsafeCell::new(GuiState { editor: None, open: false }),
+            gui: UnsafeCell::new(GuiState { view: None, open: false }),
             poisoned: AtomicBool::new(false),
         });
         let raw = Box::into_raw(instance);
@@ -458,9 +458,9 @@ unsafe extern "C" fn plugin_destroy<P: Plugin>(plugin: *const clap_plugin) {
         let shared = &(*raw).shared;
         shared.detached.store(true, Ordering::Release);
         let gui = &mut *(*raw).gui.get();
-        if let Some(editor) = gui.editor.as_mut() {
+        if let Some(view) = gui.view.as_mut() {
             if gui.open {
-                editor.close();
+                view.close();
             }
         }
         drop(Box::from_raw(raw));
@@ -536,7 +536,7 @@ unsafe extern "C" fn plugin_get_extension<P: Plugin>(_plugin: *const clap_plugin
         ext!(clap_plugin_audio_ports, AUDIO_PORTS)
     } else if id == CLAP_EXT_NOTE_PORTS && P::LAYOUT.note_input {
         ext!(clap_plugin_note_ports, NOTE_PORTS)
-    } else if id == CLAP_EXT_GUI && has_editor::<P>() {
+    } else if id == CLAP_EXT_GUI && has_view::<P>() {
         ext!(clap_plugin_gui, GUI)
     } else if id == CLAP_EXT_AUV2_PARAM_ORDERING {
         ext!(ClapPluginAuv2ParamOrdering, AUV2_PARAM_ORDERING)
@@ -549,9 +549,9 @@ unsafe extern "C" fn plugin_get_extension<P: Plugin>(_plugin: *const clap_plugin
     }
 }
 
-fn has_editor<P: Plugin>() -> bool {
-    // `editor()` is a cheap constructor; the GUI itself is only built in `open`.
-    guard(false, || P::editor().is_some())
+fn has_view<P: Plugin>() -> bool {
+    // `view()` is a cheap constructor; the GUI itself is only built in `open`.
+    guard(false, || P::view().is_some())
 }
 
 /// Extension vtables, one set per plugin type; `&Ext::<P>::X` is promoted to a static.
@@ -953,7 +953,7 @@ unsafe fn handle_event(shared: &Shared, header: &clap_event_header) -> Option<Ev
     }
 }
 
-/// Turn the editor's queued edits into gesture and value events for the host.
+/// Turn the view's queued edits into gesture and value events for the host.
 unsafe fn drain_ui_queue(shared: &Shared, out: &clap_output_events) {
     let Some(try_push) = out.try_push else { return };
     while let Some(msg) = shared.ui_queue.pop() {
@@ -1171,12 +1171,12 @@ unsafe extern "C" fn state_load<P: Plugin>(plugin: *const clap_plugin, stream: *
 const CHUNK_PRESET: [u8; 4] = *b"PRST";
 const CHUNK_MIDI_LEARN: [u8; 4] = *b"MIDI";
 const CHUNK_CONTROLLER: [u8; 4] = *b"CTRL";
-const CHUNK_EDITOR_SIZE: [u8; 4] = *b"EDSZ";
+const CHUNK_VIEW_SIZE: [u8; 4] = *b"EDSZ";
 
 /// What the framework keeps in the state besides the values: the current preset (kind 0
 /// factory / 1 file, its name or path, its display name), the MIDI learn mappings
 /// (controller, parameter id), the controller's text (UTF-8, the whole chunk) and the size
-/// the user gave a resizable editor (width, height).
+/// the user gave a resizable view (width, height).
 fn state_chunks(shared: &Shared) -> Vec<crate::state::Chunk> {
     use crate::state::put_str;
     let mut chunks = Vec::new();
@@ -1208,10 +1208,10 @@ fn state_chunks(shared: &Shared) -> Vec<crate::state::Chunk> {
     if let Some(c) = shared.controller() {
         chunks.push((CHUNK_CONTROLLER, c.save().into_bytes()));
     }
-    if let Some((w, h)) = shared.remembered_editor_size() {
+    if let Some((w, h)) = shared.remembered_view_size() {
         let mut b = w.to_le_bytes().to_vec();
         b.extend_from_slice(&h.to_le_bytes());
-        chunks.push((CHUNK_EDITOR_SIZE, b));
+        chunks.push((CHUNK_VIEW_SIZE, b));
     }
     chunks
 }
@@ -1239,13 +1239,13 @@ fn apply_state_chunks(shared: &Shared, chunks: &[crate::state::Chunk]) -> Result
             None => c.reset(),
         }
     }
-    shared.editor_size.store(0, Ordering::Relaxed);
+    shared.view_size.store(0, Ordering::Relaxed);
     for (tag, body) in chunks {
         let mut b = body.as_slice();
-        if *tag == CHUNK_EDITOR_SIZE {
+        if *tag == CHUNK_VIEW_SIZE {
             if let (Some(w), Some(h)) = (get_u32(&mut b), get_u32(&mut b)) {
                 if w > 0 && h > 0 {
-                    shared.remember_editor_size(w, h);
+                    shared.remember_view_size(w, h);
                 }
             }
         } else if *tag == CHUNK_PRESET {
@@ -1687,27 +1687,27 @@ unsafe extern "C" fn gui_create<P: Plugin>(plugin: *const clap_plugin, api: *con
     }
     let inst = Instance::<P>::from_raw(plugin);
     let gui = &mut *inst.gui.get();
-    if gui.editor.is_none() {
-        gui.editor = guard(None, P::editor);
-        // Reopen a resizable editor at the size the user left it (hosts mostly do not keep it).
-        if let (Some(editor), Some((w, h))) = (gui.editor.as_mut(), inst.shared.remembered_editor_size()) {
-            if editor.resizable() {
-                guard(false, || editor.set_size(w, h));
+    if gui.view.is_none() {
+        gui.view = guard(None, P::view);
+        // Reopen a resizable view at the size the user left it (hosts mostly do not keep it).
+        if let (Some(view), Some((w, h))) = (gui.view.as_mut(), inst.shared.remembered_view_size()) {
+            if view.resizable() {
+                guard(false, || view.set_size(w, h));
             }
         }
     }
-    if let Some(editor) = gui.editor.as_ref() {
-        inst.shared.set_editor_scale(editor.scale());
+    if let Some(view) = gui.view.as_ref() {
+        inst.shared.set_view_scale(view.scale());
     }
-    gui.editor.is_some()
+    gui.view.is_some()
 }
 
 unsafe extern "C" fn gui_destroy<P: Plugin>(plugin: *const clap_plugin) {
     let gui = gui::<P>(plugin);
     guard((), || {
-        if let Some(mut editor) = gui.editor.take() {
+        if let Some(mut view) = gui.view.take() {
             if gui.open {
-                editor.close();
+                view.close();
             }
         }
         gui.open = false;
@@ -1716,37 +1716,37 @@ unsafe extern "C" fn gui_destroy<P: Plugin>(plugin: *const clap_plugin) {
 
 unsafe extern "C" fn gui_set_scale<P: Plugin>(plugin: *const clap_plugin, scale: f64) -> bool {
     // Where sizes are logical pixels (macOS) the webview follows the OS scale on its own; on
-    // Windows the editor converts the host's physical pixels with it.
+    // Windows the view converts the host's physical pixels with it.
     let inst = Instance::<P>::from_raw(plugin);
-    let Some(editor) = (*inst.gui.get()).editor.as_mut() else { return false };
-    let taken = guard(false, || editor.set_scale(scale));
-    inst.shared.set_editor_scale(editor.scale());
+    let Some(view) = (*inst.gui.get()).view.as_mut() else { return false };
+    let taken = guard(false, || view.set_scale(scale));
+    inst.shared.set_view_scale(view.scale());
     taken
 }
 
-/// The editor's logical size in the host's pixels.
-fn to_host(editor: &dyn Editor, (w, h): (u32, u32)) -> (u32, u32) {
-    let s = editor.scale();
+/// The view's logical size in the host's pixels.
+fn to_host(view: &dyn View, (w, h): (u32, u32)) -> (u32, u32) {
+    let s = view.scale();
     ((w as f64 * s).round() as u32, (h as f64 * s).round() as u32)
 }
 
-/// A size in the host's pixels in the editor's logical pixels.
-fn from_host(editor: &dyn Editor, (w, h): (u32, u32)) -> (u32, u32) {
-    let s = editor.scale();
+/// A size in the host's pixels in the view's logical pixels.
+fn from_host(view: &dyn View, (w, h): (u32, u32)) -> (u32, u32) {
+    let s = view.scale();
     ((w as f64 / s).round() as u32, (h as f64 / s).round() as u32)
 }
 
 unsafe extern "C" fn gui_get_size<P: Plugin>(plugin: *const clap_plugin, width: *mut u32, height: *mut u32) -> bool {
-    let Some(editor) = gui::<P>(plugin).editor.as_ref() else { return false };
+    let Some(view) = gui::<P>(plugin).view.as_ref() else { return false };
     if width.is_null() || height.is_null() {
         return false;
     }
-    (*width, *height) = to_host(editor.as_ref(), editor.size());
+    (*width, *height) = to_host(view.as_ref(), view.size());
     true
 }
 
 unsafe extern "C" fn gui_can_resize<P: Plugin>(plugin: *const clap_plugin) -> bool {
-    gui::<P>(plugin).editor.as_ref().is_some_and(|e| e.resizable())
+    gui::<P>(plugin).view.as_ref().is_some_and(|e| e.resizable())
 }
 
 unsafe extern "C" fn gui_get_resize_hints<P: Plugin>(plugin: *const clap_plugin, hints: *mut clap_gui_resize_hints) -> bool {
@@ -1764,30 +1764,30 @@ unsafe extern "C" fn gui_adjust_size<P: Plugin>(plugin: *const clap_plugin, widt
     if !gui_can_resize::<P>(plugin) {
         return gui_get_size::<P>(plugin, width, height);
     }
-    let (Some(editor), Some(w), Some(h)) = (gui::<P>(plugin).editor.as_ref(), width.as_mut(), height.as_mut()) else { return false };
+    let (Some(view), Some(w), Some(h)) = (gui::<P>(plugin).view.as_ref(), width.as_mut(), height.as_mut()) else { return false };
     (*w, *h) = guard((*w, *h), || {
-        let (lw, lh) = from_host(editor.as_ref(), (*w, *h));
-        to_host(editor.as_ref(), editor.adjust_size(lw, lh))
+        let (lw, lh) = from_host(view.as_ref(), (*w, *h));
+        to_host(view.as_ref(), view.adjust_size(lw, lh))
     });
     true
 }
 
 unsafe extern "C" fn gui_set_size<P: Plugin>(plugin: *const clap_plugin, width: u32, height: u32) -> bool {
     let inst = Instance::<P>::from_raw(plugin);
-    let Some(editor) = (*inst.gui.get()).editor.as_mut() else { return false };
+    let Some(view) = (*inst.gui.get()).view.as_mut() else { return false };
     guard(false, || {
-        let before = editor.size();
+        let before = view.size();
         let asked = (width, height);
-        let (width, height) = from_host(editor.as_ref(), asked);
+        let (width, height) = from_host(view.as_ref(), asked);
         // Hosts are to pass a size `adjust_size` returned; not all of them do.
-        let (width, height) = if editor.resizable() { editor.adjust_size(width, height) } else { (width, height) };
-        if editor.set_size(width, height) {
-            if editor.resizable() && before != (width, height) {
-                inst.shared.remember_editor_size(width, height);
+        let (width, height) = if view.resizable() { view.adjust_size(width, height) } else { (width, height) };
+        if view.set_size(width, height) {
+            if view.resizable() && before != (width, height) {
+                inst.shared.remember_view_size(width, height);
             }
             true
         } else {
-            to_host(editor.as_ref(), editor.size()) == asked
+            to_host(view.as_ref(), view.size()) == asked
         }
     })
 }
@@ -1795,7 +1795,7 @@ unsafe extern "C" fn gui_set_size<P: Plugin>(plugin: *const clap_plugin, width: 
 unsafe extern "C" fn gui_set_parent<P: Plugin>(plugin: *const clap_plugin, window: *const clap_window) -> bool {
     let inst = Instance::<P>::from_raw(plugin);
     let gui = &mut *inst.gui.get();
-    let (Some(editor), Some(window)) = (gui.editor.as_mut(), window.as_ref()) else { return false };
+    let (Some(view), Some(window)) = (gui.view.as_mut(), window.as_ref()) else { return false };
     if !api_ok(window.api, false) {
         return false;
     }
@@ -1807,18 +1807,18 @@ unsafe extern "C" fn gui_set_parent<P: Plugin>(plugin: *const clap_plugin, windo
     let parent = Some(ParentWindow::X11(window.specific.x11 as u64));
     let Some(parent) = parent else { return false };
     if gui.open {
-        editor.close();
+        view.close();
         gui.open = false;
     }
-    let ctx = EditorContext { shared: inst.shared.clone() };
-    match guard(Err("the editor panicked".to_string()), || editor.open(parent, ctx)) {
+    let ctx = ViewContext { shared: inst.shared.clone() };
+    match guard(Err("the view panicked".to_string()), || view.open(parent, ctx)) {
         Ok(()) => {
             gui.open = true;
-            inst.shared.set_editor_scale(editor.scale());
+            inst.shared.set_view_scale(view.scale());
             true
         }
         Err(e) => {
-            inst.log(CLAP_LOG_ERROR, &format!("{}: cannot open the editor: {e}", P::INFO.name));
+            inst.log(CLAP_LOG_ERROR, &format!("{}: cannot open the view: {e}", P::INFO.name));
             false
         }
     }
@@ -1832,15 +1832,15 @@ unsafe extern "C" fn gui_suggest_title(_plugin: *const clap_plugin, _title: *con
 
 unsafe extern "C" fn gui_show<P: Plugin>(plugin: *const clap_plugin) -> bool {
     let gui = gui::<P>(plugin);
-    let Some(editor) = gui.editor.as_mut() else { return false };
-    guard((), || editor.set_visible(true));
+    let Some(view) = gui.view.as_mut() else { return false };
+    guard((), || view.set_visible(true));
     true
 }
 
 unsafe extern "C" fn gui_hide<P: Plugin>(plugin: *const clap_plugin) -> bool {
     let gui = gui::<P>(plugin);
-    let Some(editor) = gui.editor.as_mut() else { return false };
-    guard((), || editor.set_visible(false));
+    let Some(view) = gui.view.as_mut() else { return false };
+    guard((), || view.set_visible(false));
     true
 }
 
@@ -2103,15 +2103,15 @@ mod tests {
     }
 
     #[test]
-    fn the_editor_size_is_kept_with_the_session() {
+    fn the_view_size_is_kept_with_the_session() {
         let a = shared(None);
-        assert!(!state_chunks(&a).iter().any(|(t, _)| *t == CHUNK_EDITOR_SIZE), "not saved while never resized");
-        a.remember_editor_size(1400, 900);
+        assert!(!state_chunks(&a).iter().any(|(t, _)| *t == CHUNK_VIEW_SIZE), "not saved while never resized");
+        a.remember_view_size(1400, 900);
         let b = shared(None);
         load(&b, &save(&a)).unwrap();
-        assert_eq!(b.remembered_editor_size(), Some((1400, 900)));
+        assert_eq!(b.remembered_view_size(), Some((1400, 900)));
         load(&b, &crate::state::save(&b.params)).unwrap();
-        assert_eq!(b.remembered_editor_size(), None);
+        assert_eq!(b.remembered_view_size(), None);
     }
 
     #[test]

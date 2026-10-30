@@ -2,7 +2,7 @@
 
 APF is a framework for writing audio plugins in Rust. A plugin is an instrument or an effect
 that you load into a music program (a *host*, such as Logic Pro or REAPER). With APF you write
-one type that implements the `Plugin` trait and, if you want an editor, a web page. The build
+one type that implements the `Plugin` trait and, if you want a web view, a web page. The build
 turns them into a CLAP, VST3, Audio Unit (v2 and v3) and a standalone app. APF is MIT
 licensed, and so are its dependencies.
 
@@ -29,7 +29,7 @@ explains each when it first matters.
 
 1. **Guide.** [Install and first plugin](getting-started.md), then the ideas in the order you
    meet them: [parameters](parameters.md), [audio and MIDI](audio-and-midi.md) (with what is
-   [real-time safe](real-time-safe.md)), [the web editor](web-editor.md),
+   [real-time safe](real-time-safe.md)), [the web view](web-view.md),
    [presets and state](presets-and-state.md), [testing](testing.md),
    [hosts and formats](hosts-and-formats.md), and [hot reload](hot-reload.md): new builds
    swap into a running host while you work.
@@ -37,7 +37,7 @@ explains each when it first matters.
    Each is complete, builds into every format, has a test that renders audio without a sound
    card, and adds one idea to the one before. Read a chapter, open the example, change
    something, run its test. [The ladder](ladder.md) is the overview.
-3. **Reference.** How APF works inside, the editor's script API, the DSP building blocks,
+3. **Reference.** How APF works inside, the web view's script API, the DSP building blocks,
    Windows notes, the repository layout, test results, licences, a comparison with other
    frameworks, and the known issues.
 

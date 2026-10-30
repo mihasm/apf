@@ -1,4 +1,4 @@
-// vst3-state-check — Windows: the thread's message loop, an off-screen window for the editor.
+// vst3-state-check — Windows: the thread's message loop, an off-screen window for the view.
 #include "platform.h"
 
 #ifndef NOMINMAX
@@ -28,18 +28,18 @@ void pump(double seconds)
     } while (clock::now() < deadline);
 }
 
-bool showEditor(Steinberg::IPlugView* view, Steinberg::IPlugFrame* frame, double seconds,
+bool showView(Steinberg::IPlugView* view, Steinberg::IPlugFrame* frame, double seconds,
                 std::string& error)
 {
     if (view->isPlatformTypeSupported(Steinberg::kPlatformTypeHWND) != Steinberg::kResultTrue)
     {
-        error = "the editor does not support HWND";
+        error = "the view does not support HWND";
         return false;
     }
     Steinberg::ViewRect size;
     if (view->getSize(&size) != Steinberg::kResultTrue || size.getWidth() < 10 || size.getHeight() < 10)
         size = Steinberg::ViewRect(0, 0, 1280, 800);
-    static const wchar_t* className = L"vst3-state-check editor";
+    static const wchar_t* className = L"vst3-state-check view";
     static bool registered = false;
     if (!registered)
     {
@@ -64,7 +64,7 @@ bool showEditor(Steinberg::IPlugView* view, Steinberg::IPlugFrame* frame, double
     {
         view->setFrame(nullptr);
         DestroyWindow(window);
-        error = "the editor did not attach";
+        error = "the view did not attach";
         return false;
     }
     pump(seconds);

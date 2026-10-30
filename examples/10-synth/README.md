@@ -4,7 +4,7 @@ A compact polyphonic synth that puts examples 04 to 09 together in one file, `sr
 230 lines of plugin, heavily commented, and a few unit tests.
 
 [`demo-synth`](../demo-synth) is the full-featured synth (16 voices, a sustain pedal, a
-choice of mod wheel targets, per-note MIDI, a larger editor, a thorough test suite). This one
+choice of mod wheel targets, per-note MIDI, a larger web view, a thorough test suite). This one
 shares none of its code: it is the simplified, readable version, and the one to start a synth
 of your own from.
 
@@ -15,7 +15,7 @@ of your own from.
 | Voices, ADSR, velocity, stealing the oldest voice | [04](../04-envelope) | `Voice`, `note_on` |
 | LFO, mod wheel, pitch bend, modulation that is never written back | [05](../05-modulation) | the loop in `process` |
 | State-variable filter, shared coefficients, denormals | [06](../06-filter) | `SvfCoeffs`, `Svf::flush` |
-| Web editor with `data-param` bindings | [07](../07-gui) | `ui/index.html` |
+| Web view with `data-param` bindings | [07](../07-gui) | `ui/index.html` |
 | Factory presets with metadata, the preset bar | [08](../08-presets-and-state) | `presets/`, `data-apf-presets` |
 | MIDI learn, remote controls | [09](../09-midi-and-learn) | right-click a control; `REMOTE_CONTROLS` |
 

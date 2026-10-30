@@ -3,19 +3,19 @@
 //
 //   swiftc -O scripts/au-probe.swift -o au-probe
 //   ./au-probe aumu ApD3 MiSm            parameters: order, groups, units, value names
-//   ./au-probe aumu ApD3 MiSm --gui 30   also opens the editor for 30 s and prints every
+//   ./au-probe aumu ApD3 MiSm --gui 30   also opens the web view for 30 s and prints every
 //                                        gesture/value event the host receives meanwhile
 //   ./au-probe aumu ApD3 MiSm --preset 2 selects factory preset 2 as a host does, then
 //                                        prints the parameters again
 //   ./au-probe aumu ApT3 MiSm --gui 10 --resize [--in-process]
-//                                        also resizes the editor's window a few times, as a
+//                                        also resizes the web view's window a few times, as a
 //                                        user dragging its corner, and checks that the page
 //                                        covers the window each time (the window is red
 //                                        behind it; a capture must show no red);
 //                                        --in-process: an AUv2 in the host's process with
 //                                        its own Cocoa view, as Logic hosts it
 //   ./au-probe aumu ApMo MiSm --gui 3 --keys [--in-process]
-//                                        also types into the editor (A tapped, A held,
+//                                        also types into the web view (A tapped, A held,
 //                                        Shift) and checks that every key the page leaves
 //                                        reaches the host whole, key-down, key-up and
 //                                        modifier changes, as Logic's Musical Typing needs
@@ -160,7 +160,7 @@ if let n = presetNumber {
 
 guard let seconds = guiSeconds else { exit(0) }
 
-// Every event a v2 host (Logic) would get while the editor is used.
+// Every event a v2 host (Logic) would get while the web view is used.
 var listener: AUEventListenerRef?
 AUEventListenerCreate({ _, _, event, _, value in
     let e = event.pointee
@@ -181,7 +181,7 @@ for id in ids {
     }
 }
 
-/// Share of pure red pixels in a capture of the window: the part of the window the editor
+/// Share of pure red pixels in a capture of the window: the part of the window the web view
 /// does not cover.
 func redShare(_ window: NSWindow) -> Double? {
     let file = NSTemporaryDirectory() + "au-probe-\(getpid()).png"
@@ -211,13 +211,13 @@ func redShare(_ window: NSWindow) -> Double? {
     return total > 0 ? Double(red) / Double(total) : nil
 }
 
-var editorWindow: NSWindow?
-var editorController: NSViewController?
+var viewWindow: NSWindow?
+var viewController: NSViewController?
 
-/// Key events that came back past the editor to the host's view: ("down" | "up" | "flags", key code).
+/// Key events that came back past the web view to the host's view: ("down" | "up" | "flags", key code).
 var hostKeys: [(String, UInt16)] = []
 
-/// The host's view around the editor: a key the editor leaves goes up the responder chain to
+/// The host's view around the web view: a key the web view leaves goes up the responder chain to
 /// it, as to Logic's key handling (key commands, Musical Typing).
 class HostKeyView: NSView {
     override func keyDown(with event: NSEvent) { hostKeys.append(("down", event.keyCode)) }
@@ -244,7 +244,7 @@ func cocoaView(_ au: AudioUnit) -> NSView? {
     return fn(factory, sel, au, NSSize(width: 0, height: 0))?.takeUnretainedValue()
 }
 
-let requestEditor: (@escaping (NSViewController?) -> Void) -> Void = { done in
+let requestView: (@escaping (NSViewController?) -> Void) -> Void = { done in
     if inProcess, let view = cocoaView(au) {
         let vc = NSViewController()
         vc.view = view
@@ -253,8 +253,8 @@ let requestEditor: (@escaping (NSViewController?) -> Void) -> Void = { done in
         unit.auAudioUnit.requestViewController(completionHandler: done)
     }
 }
-requestEditor { vc in
-    guard let vc else { print("no editor"); exit(1) }
+requestView { vc in
+    guard let vc else { print("no web view"); exit(1) }
     let size = vc.preferredContentSize.width > 0 ? vc.preferredContentSize
         : vc.view.frame.width > 0 ? vc.view.frame.size : NSSize(width: 560, height: 340)
     var style: NSWindow.StyleMask = [.titled, .closable]
@@ -264,13 +264,13 @@ requestEditor { vc in
     window.title = "au-probe: \(unit.name)"
     window.backgroundColor = resizeTest ? .red : window.backgroundColor
     if resizeTest || keysTest {
-        // As a host embeds an editor: its view inside the host's own, following its size.
+        // As a host embeds a web view: its view inside the host's own, following its size.
         let container: NSView = keysTest ? HostKeyView(frame: NSRect(origin: .zero, size: size)) : NSView(frame: NSRect(origin: .zero, size: size))
         vc.view.frame = container.bounds
         vc.view.autoresizingMask = [.width, .height]
         container.addSubview(vc.view)
         window.contentView = container
-        editorController = vc
+        viewController = vc
     } else {
         window.contentViewController = vc
     }
@@ -284,55 +284,55 @@ requestEditor { vc in
         window.makeKeyAndOrderFront(nil)
         app.activate(ignoringOtherApps: true)
     }
-    editorWindow = window
+    viewWindow = window
     print("gui:        open for \(Int(seconds)) s, \(Int(size.width)) x \(Int(size.height))")
 }
 // Quick, all within ~2 s of opening: a window WindowServer reports occluded (behind a locked
 // screen; on 2026-10-24 every new window of a bare executable on the dev Mac) gets its page
-// suspended by WebKit ~3 s after it loads, and an out-of-process editor cannot be told
+// suspended by WebKit ~3 s after it loads, and an out-of-process web view cannot be told
 // otherwise from here. AU_PROBE_SETTLE / AU_PROBE_STEP (seconds) change the timing.
 let settle = Double(ProcessInfo.processInfo.environment["AU_PROBE_SETTLE"] ?? "") ?? 0.6
 let step = Double(ProcessInfo.processInfo.environment["AU_PROBE_STEP"] ?? "") ?? 0.25
 if resizeTest {
     RunLoop.main.run(until: Date(timeIntervalSinceNow: settle))
-    guard let window = editorWindow else { print("resize:     no editor window"); exit(1) }
-    print("resize:     window limits \(window.contentMinSize) .. \(window.contentMaxSize), editor view constraints \(editorController?.view.constraints.count ?? 0)")
-    // macOS pins the editor at its preferred size with priority 501: a user's drag (510)
+    guard let window = viewWindow else { print("resize:     no web view window"); exit(1) }
+    print("resize:     window limits \(window.contentMinSize) .. \(window.contentMaxSize), web view constraints \(viewController?.view.constraints.count ?? 0)")
+    // macOS pins the web view at its preferred size with priority 501: a user's drag (510)
     // wins, a program's setFrame (500) does not. Resize as the drag would.
-    for c in editorController?.view.constraints ?? [] where c.identifier?.hasPrefix("NSViewController.preferredContentSize") == true {
+    for c in viewController?.view.constraints ?? [] where c.identifier?.hasPrefix("NSViewController.preferredContentSize") == true {
         c.priority = .init(499)
     }
     var failed = false
     let opened = redShare(window) ?? -1
-    print(String(format: "resize:     as opened: %.1f %% not covered by the editor", opened * 100))
+    print(String(format: "resize:     as opened: %.1f %% not covered by the web view", opened * 100))
     if opened < 0 || opened > 0.01 { failed = true }
     for (w, h) in [(1280.0, 800.0), (300.0, 200.0), (900.0, 600.0), (1100.0, 700.0)] {
-        // Not setContentSize: an editor's view may pin the content size with constraints
+        // Not setContentSize: a web view may pin the content size with constraints
         // (AUv3 remote views do); a user's drag resizes the frame.
         let frame = window.frameRect(forContentRect: NSRect(origin: window.frame.origin, size: NSSize(width: w, height: h)))
         window.setFrame(frame, display: true)
         RunLoop.main.run(until: Date(timeIntervalSinceNow: step))
         let got = window.contentLayoutRect.size
         let uncovered = redShare(window) ?? -1
-        // Below the editor's minimum the page keeps its size: red there is expected.
+        // Below the web view's minimum the page keeps its size: red there is expected.
         let sized = abs(got.width - w) < 1 && abs(got.height - h) < 1
         let ok = sized && uncovered >= 0 && (uncovered < 0.01 || w < 500)
         if !ok { failed = true }
-        print(String(format: "resize:     window %.0f x %.0f (content %.0f x %.0f): %.1f %% not covered by the editor%@", w, h, got.width, got.height, uncovered * 100, ok ? "" : "  FAILED"))
+        print(String(format: "resize:     window %.0f x %.0f (content %.0f x %.0f): %.1f %% not covered by the web view%@", w, h, got.width, got.height, uncovered * 100, ok ? "" : "  FAILED"))
     }
-    print(failed ? "resize:     FAILED" : "resize:     OK, the editor follows the window")
+    print(failed ? "resize:     FAILED" : "resize:     OK, the web view follows the window")
 }
 if keysTest {
     RunLoop.main.run(until: Date(timeIntervalSinceNow: settle + 1))
-    guard let window = editorWindow, let editor = editorController?.view else { print("keys:       no editor window"); exit(1) }
-    // The keyboard focus into the editor, as a click would put it: an AUv2's webview, an
+    guard let window = viewWindow, let view = viewController?.view else { print("keys:       no web view window"); exit(1) }
+    // The keyboard focus into the web view, as a click would put it: an AUv2's webview, an
     // AUv3's remote view (out of process).
     func find(_ v: NSView) -> NSView? {
         let name = String(describing: type(of: v))
         if name.contains("WebView") || name.contains("RemoteView") { return v }
         return v.subviews.lazy.compactMap(find).first
     }
-    let focus = find(editor) ?? editor
+    let focus = find(view) ?? view
     window.makeFirstResponder(focus)
     print("keys:       focus in \(type(of: focus))")
     func key(_ type: NSEvent.EventType, _ chars: String, _ code: UInt16, _ flags: NSEvent.ModifierFlags = []) {

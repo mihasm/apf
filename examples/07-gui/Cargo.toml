@@ -1,6 +1,6 @@
 [package]
 name = "example-07-gui"
-description = "Example 07: a web editor with parameter bindings, a level meter and a resizable window"
+description = "Example 07: a web view with parameter bindings, a level meter and a resizable window"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

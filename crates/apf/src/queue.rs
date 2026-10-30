@@ -3,7 +3,7 @@
 //!
 //! All memory is allocated in [`SpscQueue::new`]; `push` and `pop` never allocate, lock or
 //! block. The type is `Sync` so it can sit in shared state, but the contract is that at any
-//! moment at most one thread pushes and at most one thread pops. In this framework the editor
+//! moment at most one thread pushes and at most one thread pops. In this framework the view
 //! (main thread) is the only producer and the consumer is `process`/`flush`, which CLAP never
 //! runs concurrently.
 

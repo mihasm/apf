@@ -9,7 +9,7 @@
 //   options: --bundle <path>   an AUv2 .component not installed: registered in this process
 //            --wait <seconds>  publish nothing; wait that long for a build published from
 //                              outside (`cargo xtask hot`), to compare two different builds
-//            --editor          keep the editor open in a window across the reload
+//            --view            keep the web view open in a window across the reload
 //
 // It holds a chord, publishes a copy of the current build under a new name (as `cargo xtask
 // hot` does), and keeps rendering until the shell's log (`hot.log` in the publish folder,
@@ -28,7 +28,7 @@ func fourCC(_ s: String) -> OSType { s.utf8.reduce(0) { ($0 << 8) | OSType($1) }
 
 let args = CommandLine.arguments
 guard args.count >= 4 else {
-    print("usage: au-hot-check <type> <subtype> <manufacturer> --hot-dir <folder> [--in-process] [--bundle PATH] [--wait SECONDS] [--editor]")
+    print("usage: au-hot-check <type> <subtype> <manufacturer> --hot-dir <folder> [--in-process] [--bundle PATH] [--wait SECONDS] [--view]")
     exit(2)
 }
 func option(_ name: String) -> String? {
@@ -38,7 +38,7 @@ func option(_ name: String) -> String? {
 guard let hotDir = option("--hot-dir") else { print("--hot-dir is required"); exit(2) }
 let inProcess = args.contains("--in-process")
 let waitSeconds = option("--wait").flatMap(Double.init)
-let withEditor = args.contains("--editor")
+let withView = args.contains("--view")
 var desc = AudioComponentDescription(componentType: fourCC(args[1]), componentSubType: fourCC(args[2]),
                                      componentManufacturer: fourCC(args[3]), componentFlags: 0, componentFlagsMask: 0)
 if let path = option("--bundle") {
@@ -118,7 +118,7 @@ do {
 guard let midi = au.scheduleMIDIEventBlock else { print("the unit takes no MIDI"); exit(2) }
 
 var window: NSWindow?
-if withEditor {
+if withView {
     var vc: NSViewController?
     var done = false
     au.requestViewController { c in vc = c; done = true }
@@ -131,7 +131,7 @@ if withEditor {
         w.orderFrontRegardless()
         window = w
     } else {
-        print("the unit gave no editor"); exit(2)
+        print("the unit gave no web view"); exit(2)
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "apf-host"
-description = "A minimal CLAP host for testing built plugins: load, render, open the editor"
+description = "A minimal CLAP host for testing built plugins: load, render, open the web view"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

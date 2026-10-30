@@ -1,5 +1,5 @@
 //! Parameters: their static definitions and the lock-free value store shared by the audio
-//! thread, the main thread and the editor.
+//! thread, the main thread and the view.
 //!
 //! A plugin lists its parameters once, as a `const` slice of [`ParamDef`]. Each one has a
 //! stable string key; the id the host stores in its sessions is a hash of that key, so
@@ -79,7 +79,7 @@ pub struct ParamDef {
     pub module: &'static str,
     /// Whether the host may automate it.
     pub automatable: bool,
-    /// Not shown in generic host UIs (for values only the plugin's own editor sets).
+    /// Not shown in generic host UIs (for values only the plugin's own view sets).
     pub hidden: bool,
     /// This is the plugin's bypass switch.
     pub bypass: bool,
@@ -235,7 +235,7 @@ impl ParamDef {
         }
     }
 
-    /// Host value to 0..1, the position of a slider in an editor.
+    /// Host value to 0..1, the position of a slider in a view.
     pub fn host_to_normalized(&self, v: f64) -> f64 {
         let (lo, hi) = self.host_range();
         if hi > lo { ((v - lo) / (hi - lo)).clamp(0.0, 1.0) } else { 0.0 }

@@ -1,7 +1,7 @@
 # 10 A complete synth
 
 A compact polyphonic synth that puts examples 04 to 09 together: eight voices, an envelope,
-a filter, an LFO and the wheels, a web editor, factory presets, and MIDI learn.
+a filter, an LFO and the wheels, a web view, factory presets, and MIDI learn.
 
 **You will learn**
 
@@ -28,7 +28,7 @@ wheel move the filter's cutoff, and the pitch wheel bends every voice.
 | envelope, voices, stealing | [04](04-envelope.md) | `note_on`, `Voice` |
 | vibrato, mod wheel, bend | [05](05-modulation.md) | the `wheel` and `bend` smoothers in `process` |
 | a filter and denormals | [06](06-filter.md) | `Svf`, `CONTROL_RATE`, `flush` |
-| the web editor | [07](07-gui.md) | `ui/index.html`, `editor()` |
+| the web view | [07](07-gui.md) | `ui/index.html`, `view()` |
 | factory presets | [08](08-presets-and-state.md) | `FACTORY_PRESETS`, `presets/` |
 | remote controls and MIDI learn | [09](09-midi-and-learn.md) | `REMOTE_CONTROLS` |
 

@@ -7,3 +7,8 @@ src = "src"
 [output.html]
 git-repository-url = "https://github.com/mihasm/apf"
 edit-url-template = "https://github.com/mihasm/apf/edit/main/docs/book/{path}"
+
+# Pages renamed when "editor" became "web view" (2026-10-30): old links keep working.
+[output.html.redirect]
+"/web-editor.html" = "web-view.html"
+"/editor-reference.html" = "web-view-reference.html"

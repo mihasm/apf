@@ -1,7 +1,7 @@
 //! Keyboard shortcuts the page claims (`apf.keys.claim([...])`).
 //!
 //! Hosts run their own key commands before a plugin's view sees the key: Logic duplicates a
-//! track on ⌘D, REAPER and Logic start playback on the space bar. A web editor that uses such
+//! track on ⌘D, REAPER and Logic start playback on the space bar. A web view that uses such
 //! a shortcut claims it; while the page has the keyboard focus a claimed key goes to the page
 //! first, and the host gets it only when the page does not take it (`preventDefault`).
 //! Shortcuts the page does not claim stay with the host (⌘S saves the project).

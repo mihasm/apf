@@ -7,7 +7,7 @@ program such as Logic Pro or REAPER. You write the sound in Rust. The plugin's w
 page. One crate becomes a plugin in every common format.
 
 - **Formats:** CLAP, VST3, Audio Unit (v2 and v3) and a standalone app, built from the same code.
-- **Web interface:** HTML, CSS and JavaScript in the system's web view. MIDI learn, presets,
+- **Web interface:** HTML, CSS and JavaScript, shown by the system's browser engine. MIDI learn, presets,
   resizing and host automation need no extra code.
   The web view comes from [wry](https://github.com/tauri-apps/wry), the web-view library of
   the [Tauri](https://tauri.app) project (WebKit on macOS, WebView2 on Windows).
@@ -58,7 +58,7 @@ impl Plugin for Gain {
 apf::export_plugin!(Gain);
 ```
 
-The editor is a page. This is all it takes to show the slider:
+The web view is a page. This is all it takes to show the slider:
 
 ```html
 <script src="/__apf/apf.js"></script>
@@ -99,7 +99,7 @@ Ten small examples, each a complete plugin with a test that renders audio withou
 | [04](examples/04-envelope) | envelope | voices, envelopes, velocity |
 | [05](examples/05-modulation) | modulation | LFO, mod wheel, pitch bend |
 | [06](examples/06-filter) | filter | a filter and its cutoff |
-| [07](examples/07-gui) | gui | the web editor, a level meter |
+| [07](examples/07-gui) | gui | the web view, a level meter |
 | [08](examples/08-presets-and-state) | presets-and-state | presets and plugin state |
 | [09](examples/09-midi-and-learn) | midi-and-learn | sustain pedal, MIDI learn, automation |
 | [10](examples/10-synth) | synth | a complete small synth that combines 04 to 09 |

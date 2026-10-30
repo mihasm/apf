@@ -57,8 +57,8 @@ yours must not share their first three characters.
 - **macOS, Apple silicon:** CLAP, VST3, AUv2, AUv3 and the standalone app are built.
   clap-validator, the Steinberg VST3 validator, `auval` for both Audio Units and APF's state
   checks pass for the demo synth. Logic Pro (AUv2 and AUv3) and REAPER load it, restore its
-  sessions and show its editor.
-- **Windows 11, x64:** CLAP and VST3, the editor in WebView2, REAPER; the same validators.
+  sessions and show its web view.
+- **Windows 11, x64:** CLAP and VST3, the web view in WebView2, REAPER; the same validators.
 - **Not verified:** other hosts (Bitwig, Cubase, Ableton Live, FL Studio, Studio One), the
   Windows standalone, Windows on ARM, Intel Macs, and a second monitor with another scale.
 - **Not built:** Linux, LV2, AAX, VST2.
@@ -74,7 +74,7 @@ say which host, which format and which version.
   Unit API), so a preset counts as unchanged when every parameter shows the same text, not only
   when the numbers are equal.
 - **Logic's Audio Unit v3 windows** have no resize edge. The page's own grip covers them
-  ([The web editor](web-editor.md)).
+  ([The web view](web-view.md)).
 - **AUv2 and AUv3 side by side:** the AUv3 has its own subtype, so hosts list two entries
   when both are installed.
 - **A VST3 shows many parameters in REAPER** (about 2100 for a plugin that takes MIDI):

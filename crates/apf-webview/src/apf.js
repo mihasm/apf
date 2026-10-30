@@ -31,11 +31,11 @@
 //                                    (an edit, a preset, a session loaded by the host)
 // A reply with an error status rejects with an Error carrying .status and .body (its text).
 //
-// Resizing (a resizable editor): apf.sizeLimits {min: [w, h], max: [w, h]} or null;
+// Resizing (a resizable web view): apf.sizeLimits {min: [w, h], max: [w, h]} or null;
 // apf.resize(width, height) asks the host for a new size (it answers with the window's new
 // size, the page then gets a resize event); <div data-apf-resize-grip></div> is a corner grip
 // that does this while dragged, for hosts that give the window no resize edge of their own
-// (Logic's AUv3 windows). It is hidden while the editor is not resizable.
+// (Logic's AUv3 windows). It is hidden while the web view is not resizable.
 // apf.maximize() asks for the largest size the screen allows; apf.restore() goes back to
 // the size before it; <button data-apf-maximize></button> toggles between the two.
 //
@@ -343,7 +343,7 @@
       updateSession(data);
       return true;
     } catch (e) {
-      /* the editor is closing */
+      /* the web view is closing */
       return false;
     }
   }
@@ -408,7 +408,7 @@
     root.querySelectorAll("[data-apf-maximize]").forEach(maximizeButton);
   }
 
-  // A button that fills the screen with the editor and brings it back.
+  // A button that fills the screen with the web view and brings it back.
   function maximizeButton(el) {
     el.hidden = !apf.sizeLimits;
     const show = () => {
@@ -537,7 +537,7 @@
 
   // Windows: the webview gets every key while it has the focus, and the host none. As on the
   // Mac, where the host sees a key before the page, the keys the page did not claim
-  // (apf.keys.claim) go on to the host's window, so its own shortcuts work over the editor too
+  // (apf.keys.claim) go on to the host's window, so its own shortcuts work over the web view too
   // (space plays, Ctrl+S saves); a claimed key only when the page did not take it
   // (preventDefault). Nothing typed into a text field goes on. Checked after the whole
   // dispatch, when every handler of the page has had it. "cmd" in a claim is Ctrl here.

@@ -42,7 +42,7 @@ apf::export_plugin!(Filter);
 
 From that list APF builds the lock-free value store the audio thread reads, the text hosts
 display ("1.00 kHz") and its parsing, host automation, saved sessions, presets and the controls
-of the web editor.
+of the web view.
 
 ## Kinds
 

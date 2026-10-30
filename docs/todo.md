@@ -5,7 +5,7 @@ Open work, kept for later. Nothing here is promised for a date. Problems that ex
 
 ## Before the repository is public
 
-- **Look at the web editor's security.** `APF_UI_DIR` and `APF_UI_INJECT_JS` must do nothing in
+- **Look at the web view's security.** `APF_UI_DIR` and `APF_UI_INJECT_JS` must do nothing in
   release builds. DevTools must be off. Only the plugin's own page may reach the `/__apf/`
   endpoints.
 - **Community files:** `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` and issue

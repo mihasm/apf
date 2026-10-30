@@ -6,7 +6,7 @@ use std::f32::consts::PI;
 
 use apf::dsp::poly_blep;
 use apf::prelude::*;
-use apf_webview::{assets, Asset, WebEditor};
+use apf_webview::{assets, Asset, WebView};
 
 // Hosts store parameters by key (the id is a hash of it) and Audio Units list them, and Logic
 // keeps its automation, in this order: never change a key, never insert in the middle, add
@@ -379,8 +379,8 @@ impl Plugin for DemoSynth {
         }
     }
 
-    fn editor() -> Option<Box<dyn Editor>> {
-        Some(Box::new(WebEditor::new(640, 490, UI).background(18, 19, 24)))
+    fn view() -> Option<Box<dyn View>> {
+        Some(Box::new(WebView::new(640, 490, UI).background(18, 19, 24)))
     }
 }
 

@@ -1,5 +1,5 @@
 // au-state-check — a session restored into an Audio Unit must sound the same whether or not its
-// editor was ever opened. Hosts restore a project's plugins with their windows closed; a sound
+// web view was ever opened. Hosts restore a project's plugins with their windows closed; a sound
 // that changes when the window opens is a state the plugin only half applied.
 //
 //   swiftc -O scripts/au-state-check.swift -o au-state-check
@@ -14,7 +14,7 @@
 //
 // It loads the preset into instance A, moves every parameter away from where the preset put it,
 // plays, and takes A's fullState. Then two fresh instances B and C each render a little, get
-// that state (as a project load does), and play the same notes; C has its editor opened (and
+// that state (as a project load does), and play the same notes; C has its web view opened (and
 // closed) between the load and the notes, B never has. B and C must be bit-identical, and both
 // must sound like A. No audio device is opened: the units are rendered directly.
 //
@@ -127,14 +127,14 @@ final class Player {
     }
 }
 
-/// Open the unit's editor in a window for `seconds`, then close it.
-func openEditor(_ au: AUAudioUnit, seconds: Double) {
+/// Open the unit's web view in a window for `seconds`, then close it.
+func openView(_ au: AUAudioUnit, seconds: Double) {
     var vc: NSViewController?
     var done = false
     au.requestViewController { c in vc = c; done = true }
     let deadline = Date(timeIntervalSinceNow: 20)
     while !done && Date() < deadline { pump(0.02) }
-    // A plugin without an editor has nothing to open: wait the same time instead.
+    // A plugin without a web view has nothing to open: wait the same time instead.
     guard let view = vc?.view else { pump(seconds); return }
     let size = view.frame.size.width > 10 ? view.frame.size : NSSize(width: 1280, height: 800)
     let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -214,18 +214,18 @@ func bands(_ x: [Float]) -> [Double] {
     return out
 }
 
-// --- B: restored, editor never opened; C: restored, editor opened before playing -------------
+// --- B: restored, web view never opened; C: restored, web view opened before playing -------------
 // Each scenario restores the session its own way (as Logic does at different moments); the
-// editor-closed and editor-opened instances of a scenario must render the same samples.
+// instances with the web view closed and opened must render the same samples in a scenario.
 
 let off: [[UInt8]] = [[0x80, 45, 0], [0x80, 57, 0]]
 
-func restored(editor: Bool, _ restore: (Player) -> Void) -> ([Float], [Float]) {
+func restored(view: Bool, _ restore: (Player) -> Void) -> ([Float], [Float]) {
     let p = Player(instantiate())
     restore(p)
     pump(0.3)
     _ = p.play(0.25)
-    if editor { openEditor(p.au, seconds: 2.0) } else { pump(2.3) }
+    if view { openView(p.au, seconds: 2.0) } else { pump(2.3) }
     _ = p.play(0.25)
     let out = p.play(1.5, midi: notes)
     _ = p.play(0.3, midi: off)
@@ -257,8 +257,8 @@ let scenarios: [(String, (Player) -> Void)] = [
 var failures = 0
 var last: (([Float], [Float]), ([Float], [Float]))? = nil
 for (name, restore) in scenarios {
-    let b = restored(editor: false, restore)
-    let c = restored(editor: true, restore)
+    let b = restored(view: false, restore)
+    let c = restored(view: true, restore)
     let d = max(maxDiff(b.0, c.0), maxDiff(b.1, c.1))
     let fb = bands(b.0), fc = bands(c.0)
     let ref = name.hasPrefix("factory") ? fb : bands(reference.0)
@@ -288,9 +288,9 @@ if let dir = wavDir, let (b, c) = last {
         try? AVAudioFile(forWriting: url, settings: f.settings).write(from: buf)
     }
     write("A-reference.wav", reference)
-    write("B-editor-closed.wav", b)
-    write("C-editor-opened.wav", c)
+    write("B-view-closed.wav", b)
+    write("C-view-opened.wav", c)
 }
 
-print(failures == 0 ? "OK: every restored session sounds the same with and without the editor" : "FAIL: \(failures) scenario(s) depend on the editor or lost the saved sound")
+print(failures == 0 ? "OK: every restored session sounds the same with and without the web view" : "FAIL: \(failures) scenario(s) depend on the web view or lost the saved sound")
 exit(failures == 0 ? 0 : 1)

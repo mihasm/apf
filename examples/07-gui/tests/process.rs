@@ -1,4 +1,4 @@
-//! The audio side of the plugin through the CLAP interface. The editor needs a window and is
+//! The audio side of the plugin through the CLAP interface. The web view needs a window and is
 //! checked separately: `cargo xtask bundle example-07-gui --formats clap`, then
 //! `cargo run --release -p apf-host -- "dist/release/APF Example 07 GUI.clap" --gui-test`.
 

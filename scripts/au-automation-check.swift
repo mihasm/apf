@@ -1,5 +1,5 @@
 // au-automation-check — while a host plays automation, the parameter values it reads back from an
-// Audio Unit (its own knobs: Logic's Smart Controls, the generic editor) must follow that
+// Audio Unit (its own knobs: Logic's Smart Controls, its generic Controls view) must follow that
 // automation. An AUv3 host schedules automation into the render (AURenderEventParameter); it does
 // not set the parameter tree, so a unit that answers the tree's value from anything else shows
 // values the automation has already left.

@@ -1,6 +1,6 @@
 [package]
 name = "apf-webview"
-description = "Web (HTML/JS) editors for apf plugins: a system webview (wry) embedded in the host's window"
+description = "Web (HTML/JS) views for apf plugins: a system webview (wry) embedded in the host's window"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

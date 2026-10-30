@@ -72,7 +72,7 @@ pub enum Source {
 }
 
 impl Source {
-    /// The id the editor uses: `factory:<name>` or `file:<path>`.
+    /// The id the view uses: `factory:<name>` or `file:<path>`.
     pub fn id(&self) -> String {
         match self {
             Source::Factory(name) => format!("factory:{name}"),
@@ -377,7 +377,7 @@ impl Factory {
     }
 
     /// The factory presets of a plugin (its [`crate::Plugin::FACTORY_PRESETS`]), parsed once
-    /// per process and shared by every instance, the editor's list and the hosts' indexers.
+    /// per process and shared by every instance, the view's list and the hosts' indexers.
     pub fn shared(texts: &'static [&'static str]) -> Arc<Factory> {
         // Keyed by the address of the 'static slice: it never moves nor changes.
         type Cache = Mutex<Vec<((usize, usize), Arc<Factory>)>>;
@@ -614,7 +614,7 @@ pub fn delete(info: &PluginInfo, source: &Source) -> Result<(), String> {
     Ok(())
 }
 
-/// The factory preset whose values are exactly the current ones, if any: lets an editor name
+/// The factory preset whose values are exactly the current ones, if any: lets a view name
 /// the sound of a session saved before presets existed (or one never changed).
 pub fn matching_factory(params: &Params, factory: &Factory) -> Option<(String, Vec<f64>)> {
     matching_factory_where(params, factory, |_| true).map(|(name, values, _)| (name, values))

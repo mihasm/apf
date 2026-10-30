@@ -9,7 +9,7 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use apf::{ControllerRequest, EditorContext, Plugin as _};
+use apf::{ControllerRequest, ViewContext, Plugin as _};
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::events::*;
 use clap_sys::ext::gui::*;
@@ -398,7 +398,7 @@ fn window_api() -> *const std::ffi::c_char {
 }
 
 #[test]
-fn the_editor_reopens_at_the_size_the_user_left_it() {
+fn the_view_reopens_at_the_size_the_user_left_it() {
     unsafe {
         let a = Instance::new();
         let gui: &clap_plugin_gui = ext(a.raw, CLAP_EXT_GUI);
@@ -417,7 +417,7 @@ fn the_editor_reopens_at_the_size_the_user_left_it() {
         create(a.raw);
         assert!((gui.can_resize.unwrap())(a.raw));
         assert_eq!(size(a.raw), (720, 460));
-        // The host asks what fits: the editor's limits (560 x 360 .. 2400 x 1600).
+        // The host asks what fits: the web view's limits (560 x 360 .. 2400 x 1600).
         let (mut w, mut h) = (100, 5000);
         assert!((gui.adjust_size.unwrap())(a.raw, &mut w, &mut h));
         assert_eq!((w, h), (560, 1600));
@@ -425,7 +425,7 @@ fn the_editor_reopens_at_the_size_the_user_left_it() {
         (gui.destroy.unwrap())(a.raw);
         let session = a.save();
 
-        // Another instance with that session opens its editor at 1280 x 800...
+        // Another instance with that session opens its web view at 1280 x 800...
         let b = Instance::new();
         assert!(b.load(session));
         create(b.raw);
@@ -461,8 +461,8 @@ fn the_editor_reopens_at_the_size_the_user_left_it() {
 }
 
 #[test]
-fn the_editor_edits_the_tuning_through_requests() {
-    let ctx = EditorContext::without_host(&mut tuning_demo::TuningDemo::new());
+fn the_view_edits_the_tuning_through_requests() {
+    let ctx = ViewContext::without_host(&mut tuning_demo::TuningDemo::new());
     let c = ctx.controller().expect("a controller");
     let get = |path: &str| String::from_utf8(c.request(&ControllerRequest { method: "GET", path, query: "", body: b"" }).body).unwrap();
     let post = |path: &str, body: &str| {

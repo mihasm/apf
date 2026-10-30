@@ -2,7 +2,7 @@
 //!
 //! * **Sustain pedal** (MIDI controller 64): while it is down, released keys keep sounding.
 //!   You implement this one yourself, below.
-//! * **MIDI learn**: nothing to write. In the editor, right-click a control (anything with
+//! * **MIDI learn**: nothing to write. In the web view, right-click a control (anything with
 //!   `data-param`), choose "MIDI learn", move a knob on your controller: from then on that
 //!   knob moves the parameter, in every host and format, and the host records it as
 //!   automation. The framework applies learned controllers *before* your plugin sees the
@@ -18,7 +18,7 @@
 //!   sample, and a parameter change lands on its exact sample.
 
 use apf::prelude::*;
-use apf_webview::{assets, Asset, WebEditor};
+use apf_webview::{assets, Asset, WebView};
 
 const PARAMS: &[ParamDef] = &[
     // The knobs people reach for first come first.
@@ -181,8 +181,8 @@ impl Plugin for MidiSynth {
         }
     }
 
-    fn editor() -> Option<Box<dyn Editor>> {
-        Some(Box::new(WebEditor::new(460, 260, UI).background(18, 19, 24)))
+    fn view() -> Option<Box<dyn View>> {
+        Some(Box::new(WebView::new(460, 260, UI).background(18, 19, 24)))
     }
 }
 

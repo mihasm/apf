@@ -1,4 +1,4 @@
-//! A small JSON reader and writer for preset files and the editor's endpoints, so the core
+//! A small JSON reader and writer for preset files and the view's endpoints, so the core
 //! needs no dependency for them. Main thread only; it allocates freely.
 
 use std::fmt::Write as _;

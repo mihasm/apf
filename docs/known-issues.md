@@ -24,9 +24,9 @@ steps.
 - **Status:** open.
 - **Seen in:** Logic Pro, macOS 26.6, AUv3 of the demo synth.
 
-### Logic does not resize an AUv2 editor by dragging its edge
+### Logic does not resize an AUv2 web view by dragging its edge
 
-- **Symptom:** the AUv2 editor window cannot be resized by hand. (Only a size set through
+- **Symptom:** the AUv2 web view window cannot be resized by hand. (Only a size set through
   Accessibility, which bypasses the window's limits, changes it.)
 - **Cause (likely, not proven in Logic):** Logic hosts a third-party AUv2 out of process, in
   `AUHostingServiceXPC_arrow`, and shows Apple's stand-in view (`AUv2ContainerView` from
@@ -37,16 +37,16 @@ steps.
   the host once (`sendInitialSize`).
 - **Status:** open. The AUv2 could not be loaded in the Logic run that looked at this, so it is
   not confirmed there.
-- **Seen in:** Logic Pro, macOS 26.6, an APF plugin with a resizable editor.
+- **Seen in:** Logic Pro, macOS 26.6, an APF plugin with a resizable web view.
 
-### Logic resizes an AUv3 editor at one aspect ratio
+### Logic resizes an AUv3 web view at one aspect ratio
 
 - **Symptom:** the AUv3 window resizes, but always at one aspect ratio (4:3), and Logic's View
   menu shows a zoom percentage.
 - **Cause:** Logic's doing, not AppKit's: the window has no `contentAspectRatio`, and the view
   really gets the new sizes (clap-wrapper's log: 1192 x 894, 1182 x 886, down to 952 x 714).
   Logic's `XAUViewFactory getiOSStyleViewSizesIfSupportedByVersion3AudioUnit:` offers three view
-  configurations (any size, 1024 x 768 and 1366 x 1024). If the AU supports 1024 x 768 the editor
+  configurations (any size, 1024 x 768 and 1366 x 1024). If the AU supports 1024 x 768 the web view
   is set up at that size, which is where the 4:3 comes from. Logic also called
   `newCustomCocoaViewForVersion3AudioUnit:unlimitedResizable:` with unlimited = 1 and never read
   the `preferredMinimumSize` or `preferredMaximumSize` that wrapper patch 0004 provides.
@@ -106,7 +106,7 @@ steps.
   page's own undo runs, not the host's.
 - **Status:** by design. Unclaimed keys (and the space bar) reach the host.
 
-## Editors and windows
+## Web views and windows
 
 ### Windows reported as occluded when a host is started from a shell (macOS, test host)
 
@@ -114,11 +114,11 @@ steps.
   reported occluded by WindowServer (`NSWindow.occlusionState` without `.visible`) although it was
   in front. A plain AppKit window did the same, with the screen unlocked. WebKit takes the page of
   such a window for hidden and suspends its WebContent process about 3 seconds after it loads: the
-  editor goes blank while the page lives on. The same happens behind a locked screen.
+  web view goes blank while the page lives on. The same happens behind a locked screen.
 - **Cause:** not known; it is in macOS.
-- **Status:** workaround, test host only. Real hosts were not affected (REAPER's editors and
+- **Status:** workaround, test host only. Real hosts were not affected (REAPER's web views and
   Logic's windows painted throughout). `apf-host` turns WebKit's occlusion detection off in the
-  editor's web views (SPI `_setWindowOcclusionDetectionEnabled:`) and `--screenshot` takes
+  plugin's web views (SPI `_setWindowOcclusionDetectionEnabled:`) and `--screenshot` takes
   WebKit's own snapshot of the page instead of a window capture.
 - **Seen in:** macOS 26.6, `apf-host` and `au-probe`.
 
@@ -168,7 +168,7 @@ entries keep what is worth knowing if you meet something similar.
   instead of 0.51).
 - **Cause, AUv3:** `fullState` saves two copies of the parameter values: the CLAP state and the
   base class's `data` (what the `AUParameter` objects last held). A plugin that changes values
-  itself (a preset from its own editor, a session load) leaves the objects behind, so `data`
+  itself (a preset from its own web view, a session load) leaves the objects behind, so `data`
   was stale. `setFullState` called `[super setFullState:]` first, which sets every parameter
   from `data`; with render resources allocated each setting is queued for the next render,
   which comes after the CLAP state has loaded, so the stale values won.
@@ -177,7 +177,7 @@ entries keep what is worth knowing if you meet something similar.
 - **Fix:** with a CLAP state, `setFullState` ignores `data` and afterwards publishes the plugin's
   values to the cache and the tree without echoing them back; `fullState` publishes them before
   the base class saves `data`; the AUv2 saves and restores while uninitialized. Checked with
-  `scripts/au-state-check.swift` (seven restore orders, editor closed against opened, and saved
+  `scripts/au-state-check.swift` (seven restore orders, web view closed against opened, and saved
   host states with `--state`) and, for VST3, `tools/vst3-state-check`. The VST3 wrapper never had
   the bug.
 - **Build trap found on the way:** clap-wrapper keeps its source location in the CMake cache
@@ -195,8 +195,8 @@ entries keep what is worth knowing if you meet something similar.
   clap-wrapper's AUv2 param-ordering extension (checked with `scripts/au-probe.swift`).
 - **AUv3 factory presets (0002) and their order (0003):** the presets show in the host's menu,
   factory presets first, in the plugin's order.
-- **Editor resizing in Audio Unit hosts (0004):** the patch answers `supportedViewConfigurations:`
-  with every configuration within the editor's limits.
+- **Web view resizing in Audio Unit hosts (0004):** the patch answers `supportedViewConfigurations:`
+  with every configuration within the web view's limits.
 - **AUv3 parameter tree follows host automation (0006):** what the host's own knobs read, such as
   Logic's Smart Controls, follows automation (`scripts/au-automation-check.swift`).
 - **AUv3 legato repeats keep their key (0007):** clap-wrapper reorders a same-sample note-off and
@@ -223,30 +223,30 @@ entries keep what is worth knowing if you meet something similar.
 
 - **Symptom:** a division by zero inside the validator's parameter test.
 - **Status:** workaround. Give the plugin at least one parameter (example 01 has a `Level`
-  knob for this reason). The test host's editor check needs at least three parameters.
+  knob for this reason). The test host's web view check needs at least three parameters.
 
 ## Fixed
 
-- **Blank editor in every Audio Unit in Logic:** Logic gives the plugin an `NSView` that is not
+- **Blank web view in every Audio Unit in Logic:** Logic gives the plugin an `NSView` that is not
   in a window yet, and wry panicked. The web view is now built in a hidden staging window and
   moved into the host's view.
-- **Blank editor in the AUv3 only:** the AUv3 sandbox stopped WebKit's helper processes; the
+- **Blank web view in the AUv3 only:** the AUv3 sandbox stopped WebKit's helper processes; the
   entitlement `com.apple.security.network.client` (`wrapper/auv3.entitlements`) fixes it.
-- **AUv3 Undo in Logic** did not light up after an edit in the web editor; it does now, and moves
-  the editor back.
-- **Logic's Musical Typing held every note forever** with the keyboard focus in the editor: the
-  key-up and modifier changes of keys the page left to the host were dropped. The editor now
+- **AUv3 Undo in Logic** did not light up after an edit in the web view; it does now, and moves
+  the web view back.
+- **Logic's Musical Typing held every note forever** with the keyboard focus in the web view: the
+  key-up and modifier changes of keys the page left to the host were dropped. The web view now
   forwards them. When testing with synthetic key events, check
   `CGEventSource.flagsState(.hidSystemState)` afterwards: a synthetic Command key a tool left down
   made a later A act as Command+A in the page, which looked like a plugin fault.
   Logic Pro, macOS 26.6, AUv2 and AUv3.
-- **A resizable editor was pinned to its first size** (wry's behaviour), and REAPER's CLAP host
+- **A resizable web view was pinned to its first size** (wry's behaviour), and REAPER's CLAP host
   calls `set_size` before it resizes the view, which added the growth twice. A resizable
-  `WebEditor` now lays its web view out on every frame change of the host's view, and keeps its
+  `WebView` now lays its web view out on every frame change of the host's view, and keeps its
   minimum when a host lets the window get smaller.
 - **A restored session differed from the saved one in the last bits:** `Smoother` stalled just
   short of its target (its step falls below float resolution); `Smoother::tick` now lands on the
   target, so a value sounds the same whatever its history.
-- **The space bar over the editor on Windows** did not reach REAPER's transport; unclaimed keys
+- **The space bar over the web view on Windows** did not reach REAPER's transport; unclaimed keys
   now go on to the host's window.
 - **A session restored before the plugin was initialized** (AUv2) was lost; see patch 0005 above.

@@ -21,16 +21,16 @@ note whose key is not down is released. A key struck again while the pedal holds
 releases the old note, as on a piano, so notes do not pile up. `note_off` and `set_pedal` are
 the whole logic.
 
-**MIDI learn needs no plugin code.** The user right-clicks a bound control in the editor, chooses
+**MIDI learn needs no plugin code.** The user right-clicks a bound control in the web view, chooses
 MIDI learn and moves a knob. From then on that controller moves the parameter, in every
 format, as a host gesture, and the mapping is saved with the session. APF applies learned
 controllers before the plugin sees the event, so `event` is never called for them. A few controllers
 cannot be learned because they must keep their meaning (the sustain pedal, bank select, data
 entry, the channel mode messages).
 
-MIDI learn has no plugin code to test here, and starting it is an editor action that a test host
+MIDI learn has no plugin code to test here, and starting it is a web view action that a test host
 does not reach. The framework's own tests cover it: `midi_learn_takes_the_next_controller` in
-`crates/apf/src/editor.rs` (what can be learned, replacing, cancelling) and
+`crates/apf/src/view.rs` (what can be learned, replacing, cancelling) and
 `a_learned_controller_moves_its_parameter_and_tells_the_host` in
 `examples/demo-synth/tests/clap_host.rs` (a learned controller moves its parameter at its
 sample, the host gets the gesture, and the mapping survives a saved session).

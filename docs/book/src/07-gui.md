@@ -1,13 +1,13 @@
 # 07 GUI: bindings and a meter
 
-A gain with a web editor: a slider, a checkbox, a select and a level meter.
+A gain with a web view: a slider, a checkbox, a select and a level meter.
 
 **You will learn**
 
-- how a page is embedded and shown (`WebEditor`, `assets!`)
+- how a page is embedded and shown (`WebView`, `assets!`)
 - `data-param` bindings
 - getting data from `process` to the page: atomics, a `Controller`, `apf.poller`
-- a resizable editor
+- a resizable web view
 
 The code is in `examples/07-gui/`. It is included here as it is on disk; `cargo test -p example-07-gui` builds it.
 
@@ -27,23 +27,23 @@ thread never waits for the page and the page never touches the audio thread.
 
 **`apf.poller`.** The page polls, and polling costs something, so `apf.poller` polls every 33 ms
 while the function returns `true` (the meter is moving), backs off to 100 and then 250 ms when
-the signal is silent, and stops when the editor is hidden.
+the signal is silent, and stops when the web view is hidden.
 
-**Resizing.** `.resizable(true).size_limits(..)` on the `WebEditor`, a layout that fills the
-window, and `<div data-apf-resize-grip>`. The test host expects a resizable editor to allow at
+**Resizing.** `.resizable(true).size_limits(..)` on the `WebView`, a layout that fills the
+window, and `<div data-apf-resize-grip>`. The test host expects a resizable web view to allow at
 least the size of the screen, so the upper limit here is large.
 
 **A test for the page.** A unit test reads `ui/index.html` and checks that every key the page
-binds is a real parameter. A typo is otherwise found only by looking at the editor.
+binds is a real parameter. A typo is otherwise found only by looking at the web view.
 
-## Run the editor
+## Run the web view
 
 ```sh
 cargo xtask bundle example-07-gui --formats clap
 cargo run --release -p apf-host -- "dist/release/APF Example 07 GUI.clap" --gui-test
 ```
 
-`--gui-test` opens the editor in a window, edits a parameter from the page and checks that the
+`--gui-test` opens the web view in a window, edits a parameter from the page and checks that the
 host sees it, then the other way round, then resizes the window. Set `APF_UI_DIR=examples/07-gui/ui`
 to edit the page and reload without rebuilding.
 

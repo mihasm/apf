@@ -31,13 +31,13 @@ is told the largest block the host will use.
 structs. Starting a note overwrites a slot. When all slots are busy a note *steals* one;
 nothing grows.
 
-**Share numbers with atomics.** Another thread (the editor, a controller) hands the audio
+**Share numbers with atomics.** Another thread (the web view, a controller) hands the audio
 thread a value through an `AtomicU32` or `AtomicF64`; the audio thread hands one back the same
 way. Example 07's meter is the pattern.
 
 **Send events through a queue that cannot block.** `apf::queue::SpscQueue` is a bounded
 single-producer single-consumer queue. A full queue refuses the push instead of waiting, and
-the sender decides what to drop. The framework's own editor-to-audio path is one.
+the sender decides what to drop. The framework's own web view-to-audio path is one.
 
 **Watch for hidden allocation.** `format!`, `.to_string()`, `Vec::push` beyond capacity,
 `Box<dyn Trait>` creation, `HashMap` growth, `String` building, and logging macros all

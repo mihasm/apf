@@ -1,6 +1,6 @@
-//! Example 07: a web editor. Parameter bindings, a level meter, a resizable window.
+//! Example 07: a web view. Parameter bindings, a level meter, a resizable window.
 //!
-//! The editor of an APF plugin is an ordinary web page (HTML, CSS, JavaScript) shown in the
+//! The web view of an APF plugin is an ordinary web page (HTML, CSS, JavaScript) shown in the
 //! system's web view inside the host's plugin window. The page and the plugin talk in two ways:
 //!
 //! 1. **Parameters**, with no code at all: an element with `data-param="gain"` is bound to the
@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use apf::prelude::*;
-use apf_webview::{assets, Asset, WebEditor};
+use apf_webview::{assets, Asset, WebView};
 
 const PARAMS: &[ParamDef] = &[
     ParamDef::float("gain", "Gain", -60.0, 12.0, 0.0).unit("dB").decimals(1),
@@ -30,7 +30,7 @@ const GAIN: ParamId = ParamId::of(PARAMS, "gain");
 const MUTE: ParamId = ParamId::of(PARAMS, "mute");
 const LISTEN: ParamId = ParamId::of(PARAMS, "listen");
 
-/// The files of the editor, compiled into the plugin. `index.html` is the page.
+/// The files of the web view, compiled into the plugin. `index.html` is the page.
 const UI: &[Asset] = assets!["index.html" => "../ui/index.html"];
 
 /// The loudest sample of each channel since the page last asked, written by the audio
@@ -99,7 +99,7 @@ impl Plugin for GuiGain {
         vendor: "Miha Smrekar",
         url: "",
         version: env!("CARGO_PKG_VERSION"),
-        description: "A gain with a web editor and a level meter",
+        description: "A gain with a web view and a level meter",
         features: &["audio-effect", "utility", "stereo"],
     };
     const LAYOUT: AudioLayout = AudioLayout::EFFECT_STEREO;
@@ -140,10 +140,10 @@ impl Plugin for GuiGain {
         ProcessStatus::Continue
     }
 
-    fn editor() -> Option<Box<dyn Editor>> {
+    fn view() -> Option<Box<dyn View>> {
         // 420 x 240 points to start with; the user may resize between the limits. The
         // background colour shows before the page has painted, so the window does not flash.
-        Some(Box::new(WebEditor::new(420, 240, UI).resizable(true).size_limits((320, 200), (2400, 1600)).background(18, 19, 24)))
+        Some(Box::new(WebView::new(420, 240, UI).resizable(true).size_limits((320, 200), (2400, 1600)).background(18, 19, 24)))
     }
 }
 
@@ -184,7 +184,7 @@ mod tests {
     }
 
     /// Every parameter key the page mentions must exist: a typo in the HTML is otherwise
-    /// found only by looking at the editor.
+    /// found only by looking at the web view.
     #[test]
     fn the_page_binds_existing_parameters() {
         let html = include_str!("../ui/index.html");

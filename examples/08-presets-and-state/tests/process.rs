@@ -54,7 +54,7 @@ fn a_user_preset_keeps_its_values_metadata_and_chord() {
     };
     let factory = Factory::parse(ChordPad::FACTORY_PRESETS);
     let chord = "{\"intervals\":[0,5,12]}";
-    // This is what the editor's "save" does: the parameters plus the controller's text.
+    // This is what the web view's "save" does: the parameters plus the controller's text.
     preset::save_in(&dir, &ChordPad::INFO, &params, Some(chord), Some(&meta), "My Fifths", false).unwrap();
     let listed = preset::files_in(&dir);
     assert_eq!(listed.len(), 1);

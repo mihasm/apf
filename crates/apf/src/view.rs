@@ -1,6 +1,6 @@
-//! The editor (GUI) interface and the state it shares with the audio side.
+//! The view (GUI) interface and the state it shares with the audio side.
 //!
-//! An editor never touches the plugin instance. It reads parameter values from the atomic
+//! A view never touches the plugin instance. It reads parameter values from the atomic
 //! store and sends its edits through a lock-free queue that `process`/`flush` drains, turning
 //! them into the gesture and value events the host needs for automation recording.
 
@@ -15,7 +15,7 @@ use crate::plugin::PluginInfo;
 use crate::preset::{self, Factory, Metadata, Preset, SaveError, Source};
 use crate::queue::SpscQueue;
 
-/// The native window the host gives the editor to live in.
+/// The native window the host gives the view to live in.
 #[derive(Debug, Clone, Copy)]
 pub enum ParentWindow {
     /// An `NSView*`.
@@ -29,8 +29,8 @@ pub enum ParentWindow {
 /// A plugin GUI. Every method runs on the main thread.
 ///
 /// Sizes are logical pixels (points on macOS). Where the host's window system counts physical
-/// pixels (Win32) the framework converts them with [`Editor::scale`].
-pub trait Editor {
+/// pixels (Win32) the framework converts them with [`View::scale`].
+pub trait View {
     /// Initial size in logical pixels (points on macOS).
     fn size(&self) -> (u32, u32);
 
@@ -40,8 +40,8 @@ pub trait Editor {
         1.0
     }
 
-    /// The host's own scale for the editor (CLAP `gui.set_scale`, VST3
-    /// `setContentScaleFactor`); return whether the editor uses it instead of asking the OS.
+    /// The host's own scale for the view (CLAP `gui.set_scale`, VST3
+    /// `setContentScaleFactor`); return whether the view uses it instead of asking the OS.
     fn set_scale(&mut self, _scale: f64) -> bool {
         false
     }
@@ -51,19 +51,19 @@ pub trait Editor {
         false
     }
 
-    /// The nearest size the editor can take to one the host proposes (while the user drags
+    /// The nearest size the view can take to one the host proposes (while the user drags
     /// the window's edge). The default takes any size.
     fn adjust_size(&self, width: u32, height: u32) -> (u32, u32) {
         (width, height)
     }
 
-    /// The host resized the window; return whether the editor took the new size.
+    /// The host resized the window; return whether the view took the new size.
     fn set_size(&mut self, _width: u32, _height: u32) -> bool {
         false
     }
 
     /// Create the GUI as a child of `parent`.
-    fn open(&mut self, parent: ParentWindow, ctx: EditorContext) -> Result<(), String>;
+    fn open(&mut self, parent: ParentWindow, ctx: ViewContext) -> Result<(), String>;
 
     /// Destroy the GUI; it is detached from the parent window when this returns.
     fn close(&mut self);
@@ -72,7 +72,7 @@ pub trait Editor {
     fn set_visible(&mut self, _visible: bool) {}
 }
 
-/// Messages from the editor to the audio thread.
+/// Messages from the view to the audio thread.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum UiMsg {
     Begin(u32),
@@ -82,12 +82,12 @@ pub(crate) enum UiMsg {
 
 /// What the format backend lets the shared state ask of the host.
 pub(crate) trait HostLink: Send + Sync {
-    /// Ask for `flush` (or `process`) so queued editor edits reach the host.
+    /// Ask for `flush` (or `process`) so queued view edits reach the host.
     fn request_flush(&self);
     fn request_resize(&self, width: u32, height: u32) -> bool;
     /// All values changed at once (a preset was loaded). Main thread.
     fn rescan_values(&self);
-    /// The plugin loaded this preset by itself (from its editor). Main thread.
+    /// The plugin loaded this preset by itself (from its view). Main thread.
     fn preset_loaded(&self, source: &Source);
     /// The session changed in a way parameter events do not show. Main thread.
     fn mark_dirty(&self);
@@ -134,7 +134,7 @@ pub(crate) struct Shared {
     /// (host id, index), sorted by host id.
     pub(crate) id_map: Box<[(u32, u32)]>,
     pub(crate) ui_queue: SpscQueue<UiMsg>,
-    /// Bumped on every value change (automation, state load, the editor's own edits).
+    /// Bumped on every value change (automation, state load, the view's own edits).
     pub(crate) generation: AtomicU64,
     pub(crate) host: OnceLock<Box<dyn HostLink>>,
     pub(crate) info: PluginInfo,
@@ -146,10 +146,10 @@ pub(crate) struct Shared {
     pub(crate) cc_map: [AtomicU32; 128],
     /// Index + 1 of the parameter waiting for a controller to learn (0: not learning).
     pub(crate) learning: AtomicU32,
-    /// Main thread only (editor, preset and state calls); the audio thread never touches it.
+    /// Main thread only (view, preset and state calls); the audio thread never touches it.
     pub(crate) current: Mutex<Option<CurrentPreset>>,
     /// The last value of every MIDI controller (any channel) and the pitch wheel (f32 bits),
-    /// so an editor can show what the player's hands are doing. Written by the audio thread.
+    /// so a view can show what the player's hands are doing. Written by the audio thread.
     pub(crate) controllers: [AtomicU8; 128],
     pub(crate) pitch_bend: AtomicU32,
     pub(crate) controller: OnceLock<ControllerSlot>,
@@ -159,10 +159,10 @@ pub(crate) struct Shared {
     pub(crate) callback_requested: AtomicBool,
     /// The instance is destroyed: the host pointers are gone.
     pub(crate) detached: AtomicBool,
-    /// The editor's size as the user last left it (width << 32 | height; 0: never resized).
-    pub(crate) editor_size: AtomicU64,
-    /// The open editor's [`Editor::scale`] (f64 bits), for its resize requests.
-    pub(crate) editor_scale: AtomicU64,
+    /// The view's size as the user last left it (width << 32 | height; 0: never resized).
+    pub(crate) view_size: AtomicU64,
+    /// The open view's [`View::scale`] (f64 bits), for its resize requests.
+    pub(crate) view_scale: AtomicU64,
 }
 
 impl Shared {
@@ -187,8 +187,8 @@ impl Shared {
             pending_dirty: AtomicBool::new(false),
             callback_requested: AtomicBool::new(false),
             detached: AtomicBool::new(false),
-            editor_size: AtomicU64::new(0),
-            editor_scale: AtomicU64::new(1f64.to_bits()),
+            view_size: AtomicU64::new(0),
+            view_scale: AtomicU64::new(1f64.to_bits()),
         };
         shared.name_current_sound();
         shared
@@ -291,33 +291,33 @@ impl Shared {
         }
     }
 
-    pub(crate) fn remembered_editor_size(&self) -> Option<(u32, u32)> {
-        match self.editor_size.load(Ordering::Relaxed) {
+    pub(crate) fn remembered_view_size(&self) -> Option<(u32, u32)> {
+        match self.view_size.load(Ordering::Relaxed) {
             0 => None,
             v => Some(((v >> 32) as u32, v as u32)),
         }
     }
 
-    pub(crate) fn remember_editor_size(&self, width: u32, height: u32) {
-        self.editor_size.store((width as u64) << 32 | height as u64, Ordering::Relaxed);
+    pub(crate) fn remember_view_size(&self, width: u32, height: u32) {
+        self.view_size.store((width as u64) << 32 | height as u64, Ordering::Relaxed);
     }
 
-    pub(crate) fn editor_scale(&self) -> f64 {
-        f64::from_bits(self.editor_scale.load(Ordering::Relaxed))
+    pub(crate) fn view_scale(&self) -> f64 {
+        f64::from_bits(self.view_scale.load(Ordering::Relaxed))
     }
 
-    pub(crate) fn set_editor_scale(&self, scale: f64) {
+    pub(crate) fn set_view_scale(&self, scale: f64) {
         let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
-        self.editor_scale.store(scale.to_bits(), Ordering::Relaxed);
+        self.view_scale.store(scale.to_bits(), Ordering::Relaxed);
     }
 
     pub(crate) fn host_values(&self) -> Vec<f64> {
         (0..self.params.len()).map(|i| self.params.host_value(i)).collect()
     }
 
-    /// Load a preset into the parameters and tell the host. `from_editor`: the plugin chose
+    /// Load a preset into the parameters and tell the host. `from_view`: the plugin chose
     /// it, so the host's own preset display is told too. Main thread.
-    pub(crate) fn load_preset(&self, source: &Source, from_editor: bool) -> Result<(), String> {
+    pub(crate) fn load_preset(&self, source: &Source, from_view: bool) -> Result<(), String> {
         let p = preset::read(source, &self.factory)?;
         if p.plugin.as_deref().is_some_and(|id| id != self.info.id) {
             return Err(format!("'{}' is a preset of another plugin ({})", p.name, p.plugin.unwrap_or_default()));
@@ -345,7 +345,7 @@ impl Shared {
         self.bump_generation();
         if let Some(h) = self.host.get() {
             h.rescan_values();
-            if from_editor && loaded.is_ok() {
+            if from_view && loaded.is_ok() {
                 h.preset_loaded(source);
             }
         }
@@ -356,7 +356,7 @@ impl Shared {
         loaded
     }
 
-    /// Remember a controller's position for the editor (audio thread, wait-free).
+    /// Remember a controller's position for the view (audio thread, wait-free).
     #[inline]
     pub(crate) fn note_controller(&self, cc: u8, value: u8) {
         if let Some(slot) = self.controllers.get(cc as usize) {
@@ -426,31 +426,31 @@ impl Shared {
     }
 }
 
-/// The editor's handle on the plugin's parameters. Cheap to clone; use it from the main
+/// The view's handle on the plugin's parameters. Cheap to clone; use it from the main
 /// thread only (it is the single producer of the edit queue).
 #[derive(Clone)]
-pub struct EditorContext {
+pub struct ViewContext {
     pub(crate) shared: Arc<Shared>,
 }
 
-impl EditorContext {
+impl ViewContext {
     /// A context for an instance of `P` outside any host, with its controller: for tests of
-    /// editors and their requests. Parameters start at their defaults; edits are kept but
+    /// views and their requests. Parameters start at their defaults; edits are kept but
     /// reach no host, and the controller's host handle does nothing.
-    pub fn without_host<P: crate::Plugin>(plugin: &mut P) -> EditorContext {
+    pub fn without_host<P: crate::Plugin>(plugin: &mut P) -> ViewContext {
         Self::without_host_with_presets(plugin, P::FACTORY_PRESETS)
     }
 
-    /// Like [`EditorContext::without_host`], with these factory presets instead of the
+    /// Like [`ViewContext::without_host`], with these factory presets instead of the
     /// plugin's: for tests of preset browsers with a generated library.
-    pub fn without_host_with_presets<P: crate::Plugin>(plugin: &mut P, factory_presets: &'static [&'static str]) -> EditorContext {
+    pub fn without_host_with_presets<P: crate::Plugin>(plugin: &mut P, factory_presets: &'static [&'static str]) -> ViewContext {
         let shared = Arc::new(Shared::new(Params::new(P::PARAMS), P::INFO, factory_presets));
         if let Some(controller) = plugin.controller(crate::controller::HostHandle::new(&shared)) {
             let default = controller.save();
             let _ = shared.controller.set(ControllerSlot { controller, default });
             shared.name_current_sound();
         }
-        EditorContext { shared }
+        ViewContext { shared }
     }
 
     /// The plugin's parameter values.
@@ -486,9 +486,9 @@ impl EditorContext {
         }
     }
 
-    /// Ask the host for a new editor size, in logical pixels; the host answers with `set_size`.
+    /// Ask the host for a new view size, in logical pixels; the host answers with `set_size`.
     pub fn request_resize(&self, width: u32, height: u32) -> bool {
-        let scale = self.shared.editor_scale();
+        let scale = self.shared.view_scale();
         let (w, h) = ((width as f64 * scale).round() as u32, (height as f64 * scale).round() as u32);
         self.shared.host.get().is_some_and(|host| host.request_resize(w, h))
     }
@@ -546,7 +546,7 @@ impl EditorContext {
         self.save_preset_with(name, overwrite, None)
     }
 
-    /// Like [`EditorContext::save_preset`], with what the preset says about itself; `None`
+    /// Like [`ViewContext::save_preset`], with what the preset says about itself; `None`
     /// keeps what the overwritten preset said.
     pub fn save_preset_with(&self, name: &str, overwrite: bool, meta: Option<&Metadata>) -> Result<Source, SaveError> {
         let s = &self.shared;
@@ -632,7 +632,7 @@ mod tests {
     #[test]
     fn midi_learn_takes_the_next_controller() {
         let shared = Arc::new(Shared::new(Params::new(DEFS), INFO, &[]));
-        let ctx = EditorContext { shared: shared.clone() };
+        let ctx = ViewContext { shared: shared.clone() };
         assert_eq!(shared.learn_cc(21), None, "not learning");
         ctx.learn(Some(1));
         assert_eq!(ctx.learning(), Some(1));
@@ -672,7 +672,7 @@ mod tests {
     #[test]
     fn presets_carry_the_controller_data() {
         let (shared, c) = with_controller();
-        let ctx = EditorContext { shared: shared.clone() };
+        let ctx = ViewContext { shared: shared.clone() };
         assert!(ctx.controller().is_some());
         // The default sound is "Init": its parameters and its controller data match.
         assert_eq!(ctx.current_preset().map(|p| (p.1, p.2)), Some(("Init".into(), false)));

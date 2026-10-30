@@ -33,7 +33,7 @@ const FACTORY_PRESETS: &'static [&'static str] =
     apf::presets!["../presets/Init.apfpreset", "../presets/Pad.apfpreset"];   // in `impl Plugin`
 ```
 
-Paths are relative to the source file, like `include_str!`. They appear in the editor's preset
+Paths are relative to the source file, like `include_str!`. They appear in the web view's preset
 bar and in hosts' preset menus, new ones last (Audio Unit hosts number them by position, so
 append new factory presets at the end).
 
@@ -46,7 +46,7 @@ formats:
 | Windows | `Documents\<vendor>\<plugin>\Presets` |
 | Linux (not built yet) | `~/.local/share/<vendor>/<plugin>/presets` |
 
-The web editor gets a preset bar from `<div data-apf-presets></div>`: list, previous and next,
+The web view gets a preset bar from `<div data-apf-presets></div>`: list, previous and next,
 save, replace, delete, and a mark when the sound was changed. The session remembers which
 preset the sound came from. A session from before presets existed is named after the factory
 preset it equals.
@@ -65,11 +65,11 @@ load unchanged.
 - **Rust:** `preset::Metadata { category, subcategory, tags, description, author }` (for the
   keys `type`, `subtype`, `mood`, `description`, `author`; missing ones are empty) on
   `Preset::meta` and `Entry::meta`; `preset::to_json_with_meta(info, name, &meta, params,
-  controller)`; `EditorContext::save_preset_with(name, overwrite, Some(&meta))` (`save_preset`
+  controller)`; `ViewContext::save_preset_with(name, overwrite, Some(&meta))` (`save_preset`
   and `None` keep the metadata of the preset they overwrite); `preset::Factory::shared(FACTORY_PRESETS)`
   parses the factory presets once per process.
-- **Editor:** `apf.presets.list()` and `apf.presets.save(name, overwrite, meta)`
-  ([Editor reference](editor-reference.md)). The preset bar groups factory presets by type,
+- **Web view:** `apf.presets.list()` and `apf.presets.save(name, overwrite, meta)`
+  ([Web view reference](web-view-reference.md)). The preset bar groups factory presets by type,
   shows the description as a tooltip, and a sound saved from a typed preset keeps its type,
   subtype and mood.
 - **Hosts:** CLAP preset discovery reports type, subtype and mood words as features (lower
@@ -156,7 +156,7 @@ The `Controller` trait in full:
 | `load(&self, text: &str) -> Result<(), String>` | when a session or preset is loaded; an error resets the controller |
 | `reset(&self)` | for a session or preset without your data |
 | `revision(&self) -> u64` | often; changes whenever `save()` would, and `save` is called only when it moved |
-| `request(&self, req: &ControllerRequest) -> ControllerResponse` | for the editor's requests; the default answers 404 |
+| `request(&self, req: &ControllerRequest) -> ControllerResponse` | for the web view's requests; the default answers 404 |
 | `on_main_thread(&self)` | after `host.request_callback()` |
 
 How it fits in:
@@ -170,9 +170,9 @@ How it fits in:
   mark also follows the controller's data (compared as JSON, member order ignored, only when
   `revision` moved). Host preset menus (CLAP preset load, AU factory presets, VST3 programs)
   work the same way.
-- **Editor.** `GET` and `POST /__apf/plugin/<path>?<query>` reach `request`; in the page use
-  `apf.plugin.get`, `post`, `raw` and `onChange` ([Editor reference](editor-reference.md)).
-  Rust editors get the controller from `EditorContext::controller()`.
+- **Web view.** `GET` and `POST /__apf/plugin/<path>?<query>` reach `request`; in the page use
+  `apf.plugin.get`, `post`, `raw` and `onChange` ([Web view reference](web-view-reference.md)).
+  A view written in Rust (not a web page) gets the controller from `ViewContext::controller()`.
 - **Host.** `HostHandle::mark_dirty()` tells the host the session changed, so its "project
   changed" mark lights (CLAP `state.mark_dirty`; through clap-wrapper VST3 `setDirty(true)`,
   for AUv2 a ClassInfo and a PresentPreset notification, the latter being what Logic listens
@@ -181,7 +181,7 @@ How it fits in:
   `Controller::on_main_thread`.
 - **Parameters from the controller.** `begin_edit`, `set_param`, `set_param_plain`, `end_edit`
   and `edit_param` on `HostHandle` move a parameter as a host gesture from the main thread
-  (through the editor's queue, so the host records it). Use them for a knob in a patch that is
+  (through the web view's queue, so the host records it). Use them for a knob in a patch that is
   mapped to a macro parameter.
 
 Examples [07](07-gui.md) and [08](08-presets-and-state.md) show a controller, and

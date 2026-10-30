@@ -120,7 +120,7 @@ make_clapfirst_plugins(
 )
 
 if (TARGET ${APF_TARGET}_auv3 AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    # make_clapfirst_plugins has no way to pass the AUv3's entitlements; the web editor needs
+    # make_clapfirst_plugins has no way to pass the AUv3's entitlements; the web view needs
     # more than clap-wrapper's default (see auv3.entitlements). Re-sign after its own signing
     # step (post-build commands run in the order they were added), before the host app
     # embeds the extension.
@@ -133,5 +133,5 @@ if (TARGET ${APF_TARGET}_auv3 AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
             XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${apf_entitlements}")
     add_custom_command(TARGET ${APF_TARGET}_auv3 POST_BUILD
             COMMAND codesign -s - -f --entitlements "${apf_entitlements}" "$<TARGET_BUNDLE_DIR:${APF_TARGET}_auv3>"
-            COMMENT "Signing the AUv3 appex with the web editor's entitlements")
+            COMMENT "Signing the AUv3 appex with the web view's entitlements")
 endif()

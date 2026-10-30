@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::controller::{Controller, HostHandle};
-use crate::editor::Editor;
+use crate::view::View;
 use crate::param::{ParamDef, Params};
 
 /// Static description of a plugin, shown by hosts.
@@ -295,7 +295,7 @@ pub trait Plugin: Send + Sized + 'static {
     /// parameters.
     const REMOTE_CONTROLS: &'static [RemotePage] = &[];
     /// Factory presets: the text of `.apfpreset` files, usually `include_str!`ed from the
-    /// plugin's `presets/` folder (see [`crate::preset`]). They are offered in the editor's
+    /// plugin's `presets/` folder (see [`crate::preset`]). They are offered in the view's
     /// preset list and to hosts, beside the user's own presets.
     const FACTORY_PRESETS: &'static [&'static str] = &[];
 
@@ -318,14 +318,14 @@ pub trait Plugin: Send + Sized + 'static {
     /// Fill (instruments) or change (effects) one block of audio. Audio thread: no allocation, no locks, no waiting.
     fn process(&mut self, audio: &mut AudioBuffer, ctx: &ProcessContext) -> ProcessStatus;
 
-    /// The editor, if the plugin has one. Called on the main thread each time the host
+    /// The view, if the plugin has one. Called on the main thread each time the host
     /// creates the plugin's GUI.
-    fn editor() -> Option<Box<dyn Editor>> {
+    fn view() -> Option<Box<dyn View>> {
         None
     }
 
     /// The plugin's [`Controller`], if it keeps session state beyond its parameters or
-    /// answers its editor's requests (see [`crate::controller`]). Called once per instance on
+    /// answers its view's requests (see [`crate::controller`]). Called once per instance on
     /// the main thread, when the host initialises it (before `activate`); `host` lets the
     /// controller mark the session dirty and more. Share with the controller, through `Arc`s
     /// the plugin keeps too, whatever `process` must see of its state.

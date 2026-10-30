@@ -10,11 +10,11 @@ when you want to know what happens underneath.
    +-------------+--------------+
    | apf          core          |  crates/apf
    |  Plugin trait, ParamDef,   |   - parameters: const definitions, lock-free atomic store
-   |  AudioBuffer, Event        |   - editor -> audio: wait-free SPSC queue
+   |  AudioBuffer, Event        |   - web view -> audio: wait-free SPSC queue
    |  CLAP backend (clap.rs)    |   - CLAP ABI: entry, factory, params, state,
    |                            |     audio/note ports, gui; sample-accurate event splitting
    +----------------------------+
-   | apf-webview  editor        |  crates/apf-webview
+   | apf-webview  web view        |  crates/apf-webview
    |  wry child webview in the  |   - serves the page from memory over apf://
    |  host's NSView/HWND        |   - apf.js binds <input data-param="cutoff"> etc.
    +-------------+--------------+
@@ -45,7 +45,7 @@ list is in [Repository and tools](repository.md).
 - Parameter values live in atomics (an `AtomicU64` holding the host's `f64` value) and can be
   read from every thread. Host automation is applied at its exact sample: the framework splits
   the block at every event.
-- Edits from the editor go through a wait-free single-producer, single-consumer queue.
+- Edits from the web view go through a wait-free single-producer, single-consumer queue.
   `process` (or `params.flush` when the host is not processing) drains it into
   gesture-begin, value and gesture-end events for the host, so automation recording and
   touch modes work.
@@ -69,11 +69,11 @@ being processed. The framework splits blocks at events and moves the song positi
 frames before each part (while playing, at the host's tempo); a transport event inside the
 block takes over from its frame.
 
-## Web editor
+## Web view
 
 Tauri cannot run inside a plugin: it owns the window and the event loop, and in a plugin the
 host owns both ([tauri-apps/tauri#1872](https://github.com/tauri-apps/tauri/issues/1872)).
 `wry`, the layer below Tauri, can create a web view as a child of a window it does not own.
 `apf-webview` does that with the window the host passes to the CLAP `gui.set_parent` call. The
-page is served from memory over a custom `apf://` scheme. [The web editor](web-editor.md) and
-the [editor reference](editor-reference.md) describe what the page can do.
+page is served from memory over a custom `apf://` scheme. [The web view](web-view.md) and
+the [web view reference](web-view-reference.md) describe what the page can do.

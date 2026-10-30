@@ -5,8 +5,8 @@
 //! loads the plugin itself from a dynamic library that `cargo xtask hot <plugin>` publishes,
 //! and hands every host call on to it. When a new build is published, each instance swaps it
 //! in on the main thread, between two audio blocks: it saves the running instance's state,
-//! closes its editor, creates an instance from the new library, restores the state, activates
-//! it as the host had and opens the editor again in the same parent view. The host keeps its
+//! closes its web view, creates an instance from the new library, restores the state, activates
+//! it as the host had and opens the web view again in the same parent view. The host keeps its
 //! instance of the shell throughout, so a new build plays without closing the DAW, the
 //! project or the plugin window.
 //!
@@ -484,7 +484,7 @@ unsafe extern "C" fn read_slice(stream: *const clap_istream, buffer: *mut c_void
     n as i64
 }
 
-/// What the host did with the editor, to do it again with a new instance's.
+/// What the host did with the web view, to do it again with a new instance's.
 #[derive(Clone, Default)]
 struct GuiRecord {
     created: Option<(CString, bool)>,
@@ -667,15 +667,15 @@ impl Proxy {
 
         if let Some((api, floating)) = &gui.created {
             if !reopen_gui(self, new_plugin, new_ext, &gui, api, *floating) {
-                notes.push("the editor did not open again");
+                notes.push("the web view did not open again");
             }
         }
         if let Some(f) = self.host_params.get().as_ref().and_then(|p| p.rescan) {
             f(self.host, CLAP_PARAM_RESCAN_VALUES | CLAP_PARAM_RESCAN_TEXT);
         }
-        let editor = if gui.created.is_some() { ", editor reopened" } else { "" };
+        let view = if gui.created.is_some() { ", web view reopened" } else { "" };
         let tail = if notes.is_empty() { String::new() } else { format!(" — {}", notes.join("; ")) };
-        self.log(CLAP_LOG_INFO, &format!("{name}: reloaded {} in {} ms{editor}{tail}", lib.name, start.elapsed().as_millis()));
+        self.log(CLAP_LOG_INFO, &format!("{name}: reloaded {} in {} ms{view}{tail}", lib.name, start.elapsed().as_millis()));
     }
 }
 
@@ -693,7 +693,7 @@ unsafe fn create_inner(lib: &'static Library, host: *const clap_host, id: &CStr)
     Ok(Inner { plugin, ext: Exts::query(plugin) })
 }
 
-/// Open the new instance's editor where the old one was.
+/// Open the new instance's web view where the old one was.
 unsafe fn reopen_gui(p: &Proxy, plugin: *const clap_plugin, ext: Exts, rec: &GuiRecord, api: &CStr, floating: bool) -> bool {
     let Some(g) = ext.gui else { return false };
     if !g.create.is_some_and(|f| f(plugin, api.as_ptr(), floating)) {
@@ -702,7 +702,7 @@ unsafe fn reopen_gui(p: &Proxy, plugin: *const clap_plugin, ext: Exts, rec: &Gui
     if let (Some(scale), Some(f)) = (rec.scale, g.set_scale) {
         f(plugin, scale);
     }
-    // The host's frame keeps its size; the editor takes it if it can, or asks for its own.
+    // The host's frame keeps its size; the web view takes it if it can, or asks for its own.
     if let Some((w, h)) = rec.size {
         let resizable = g.can_resize.is_some_and(|f| f(plugin));
         let (mut ew, mut eh) = (w, h);
@@ -1038,7 +1038,7 @@ unsafe extern "C" fn gui_set_parent(p: *const clap_plugin, window: *const clap_w
     if let Some(w) = window.as_ref() {
         let mut rec = proxy(p).gui.borrow_mut();
         rec.parent = Some(*w);
-        // Until the host sets one, the frame is the size the editor started with.
+        // Until the host sets one, the frame is the size the web view started with.
         if rec.size.is_none() {
             drop(rec);
             let (mut w, mut h) = (0, 0);

@@ -2,7 +2,7 @@
 //!
 //! The tuning (a name and a deviation in cents for each of the twelve pitch classes) is not a
 //! parameter: it is session state the controller keeps, saves with the session and in
-//! presets (the factory presets carry it as JSON), and edits on the web editor's requests
+//! presets (the factory presets carry it as JSON), and edits on the web view's requests
 //! (`/__apf/plugin/tuning`). The audio thread reads it from atomics the plugin shares with
 //! the controller, so `process` never waits for it.
 
@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use apf::json::{self, Value};
 use apf::prelude::*;
-use apf_webview::{assets, Asset, WebEditor};
+use apf_webview::{assets, Asset, WebView};
 
 const PARAMS: &[ParamDef] = &[
     ParamDef::float("gain", "Gain", -48.0, 6.0, -12.0).unit("dB").decimals(1),
@@ -79,7 +79,7 @@ impl Tuning {
     }
 }
 
-/// Keeps the tuning, answers the editor, and publishes the tuning to the audio thread.
+/// Keeps the tuning, answers the web view, and publishes the tuning to the audio thread.
 pub struct TuningController {
     tuning: Mutex<Tuning>,
     revision: AtomicU64,
@@ -273,8 +273,8 @@ impl Plugin for TuningDemo {
         if self.voices.iter().any(|v| !v.env.is_idle()) { ProcessStatus::Continue } else { ProcessStatus::Sleep }
     }
 
-    fn editor() -> Option<Box<dyn Editor>> {
-        Some(Box::new(WebEditor::new(720, 460, UI).resizable(true).size_limits((560, 360), (2400, 1600)).background(18, 19, 24)))
+    fn view() -> Option<Box<dyn View>> {
+        Some(Box::new(WebView::new(720, 460, UI).resizable(true).size_limits((560, 360), (2400, 1600)).background(18, 19, 24)))
     }
 }
 

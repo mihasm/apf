@@ -8,7 +8,7 @@
 - [Parameters](parameters.md)
 - [Audio and MIDI](audio-and-midi.md)
   - [What is real-time safe](real-time-safe.md)
-- [The web editor](web-editor.md)
+- [The web view](web-view.md)
 - [Presets and state](presets-and-state.md)
 - [Testing without a host](testing.md)
 - [Hosts and formats](hosts-and-formats.md)
@@ -31,7 +31,7 @@
 # Reference
 
 - [How APF works](architecture.md)
-- [Editor reference](editor-reference.md)
+- [Web view reference](web-view-reference.md)
 - [DSP building blocks](dsp.md)
 - [Windows](windows.md)
 - [Repository and tools](repository.md)

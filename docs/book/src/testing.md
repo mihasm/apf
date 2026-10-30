@@ -45,14 +45,14 @@ folder (example 08).
 ## Beyond unit tests
 
 **`apf-host`** is a minimal CLAP host in this repository. It loads a built `.clap`, renders
-audio and drives the editor end to end:
+audio and drives the web view end to end:
 
 ```sh
 cargo run --release -p apf-host -- "dist/release/APF Example 07 GUI.clap" --gui-test
 cargo run --release -p apf-host -- "dist/release/APF Example 07 GUI.clap" --gui 3 --screenshot out.png
 ```
 
-`--gui-test` opens the editor, edits a parameter from the page and checks that the host sees
+`--gui-test` opens the web view, edits a parameter from the page and checks that the host sees
 it, then the other way round, then resizes the window and sends keys. Nothing is played to a
 sound card.
 
@@ -61,6 +61,6 @@ it: clap-validator, the Steinberg VST3 validator, Apple's `auval` (macOS), and A
 checks (a restored session must sound the same, in several restore orders). [Validation](validation.md)
 lists the tools and what they found. With `--hot` it also checks that the
 [hot-reload](hot-reload.md) shell swaps in a new build in a CLAP host and in both Audio Unit
-versions. The run expects a plugin with parameters, and the editor
+versions. The run expects a plugin with parameters, and the web view
 check at least three; a plugin without parameters makes clap-validator 0.4.1 fail its parameter
 test.

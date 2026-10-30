@@ -3,7 +3,7 @@
 //! A parameter is described once, at compile time, by a [`ParamDef`]. From that description
 //! the framework builds everything else: the value store the audio thread reads, the list a
 //! host shows, the text it displays ("2.00 kHz"), saved projects and presets, and the
-//! controls of a web editor.
+//! controls of a web view.
 //!
 //! **Three rules to keep forever once a plugin is released**
 //!

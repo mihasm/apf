@@ -579,7 +579,7 @@ fn restore_auv2_info_plist(build_dir: &Path, component: &Path, target: &str) -> 
 
 /// Give the AUv3 component in `app` the name hosts list ("Manufacturer: Name"), then sign the
 /// extension and the app again, each keeping the entitlements it had (the extension's sandbox
-/// and network entitlements are what its web editor needs). clap-wrapper's AUv3 build takes
+/// and network entitlements are what its web view needs). clap-wrapper's AUv3 build takes
 /// the name from the CLAP descriptor and has no option for another one.
 fn rename_auv3(app: &Path, manufacturer: &str, name: &str) -> Result<()> {
     let appex = fs::read_dir(app.join("Contents/PlugIns"))
@@ -888,7 +888,7 @@ fn hot_watch(ctx: &Ctx, plugin: &Plugin, debug: bool) -> Result<()> {
         if now == last {
             continue;
         }
-        // Let an editor finish saving several files.
+        // Let a text editor finish saving several files.
         std::thread::sleep(std::time::Duration::from_millis(200));
         last = sources_stamp(&roots);
         if let Err(e) = publish(ctx, plugin, debug) {
@@ -959,7 +959,7 @@ fn validate(ctx: &Ctx, plugin: &Plugin, reaper: bool) -> Result<()> {
 
     let clap = dist.join(format!("{}.clap", plugin.name));
     report("clap-validator", clap_validator(&clap));
-    report("apf-host (render + editor round trip)", apf_host(ctx, &clap));
+    report("apf-host (render + web view round trip)", apf_host(ctx, &clap));
 
     let vst3 = dist.join(format!("{}.vst3", plugin.name));
     if vst3.exists() {
@@ -979,7 +979,7 @@ fn validate(ctx: &Ctx, plugin: &Plugin, reaper: bool) -> Result<()> {
         if auv3.exists() {
             report("auval (AUv3)", auval(&plugin.au_type, &plugin.au_v3_subtype, &plugin.au_manufacturer));
         }
-        // A restored session must sound the same with the editor closed and opened: the built
+        // A restored session must sound the same with the web view closed and opened: the built
         // AUv2 (registered in the checking process, not installed) and the installed AUv3.
         let component = dist.join(format!("{}.component", plugin.name));
         if component.exists() {
@@ -1003,7 +1003,7 @@ fn validate(ctx: &Ctx, plugin: &Plugin, reaper: bool) -> Result<()> {
         }
     }
     if ctx.hot {
-        // The shell swaps a newly published build in while the host renders, with the editor
+        // The shell swaps a newly published build in while the host renders, with the web view
         // open: the CLAP in apf-host, the AUv2 build in this process and the installed AUv3
         // (out of process, as Logic loads it) when it is the shell.
         let dir = ctx.hot_dir();
@@ -1014,7 +1014,7 @@ fn validate(ctx: &Ctx, plugin: &Plugin, reaper: bool) -> Result<()> {
             if component.exists() {
                 report(
                     "au-hot-check (AUv2 build)",
-                    swift_check(ctx, "au-hot-check", &[&plugin.au_type, "HChk", &plugin.au_manufacturer, "--in-process", "--bundle", &component.to_string_lossy(), "--hot-dir", &dir, "--editor"]),
+                    swift_check(ctx, "au-hot-check", &[&plugin.au_type, "HChk", &plugin.au_manufacturer, "--in-process", "--bundle", &component.to_string_lossy(), "--hot-dir", &dir, "--view"]),
                 );
             }
             let appex = |app: &Path| app.join(format!("Contents/PlugIns/{}.appex/Contents/MacOS/{}", plugin.name, plugin.name));
@@ -1023,7 +1023,7 @@ fn validate(ctx: &Ctx, plugin: &Plugin, reaper: bool) -> Result<()> {
             if fs::read(appex(&built_auv3)).ok().is_some_and(|b| fs::read(appex(&installed_auv3)).ok() == Some(b)) {
                 report(
                     "au-hot-check (AUv3)",
-                    swift_check(ctx, "au-hot-check", &[&plugin.au_type, &plugin.au_v3_subtype, &plugin.au_manufacturer, "--hot-dir", &dir, "--editor"]),
+                    swift_check(ctx, "au-hot-check", &[&plugin.au_type, &plugin.au_v3_subtype, &plugin.au_manufacturer, "--hot-dir", &dir, "--view"]),
                 );
             } else {
                 println!("== au-hot-check (AUv3): skipped, the installed AUv3 is not this shell (cargo xtask install --hot --formats all)");
@@ -1043,7 +1043,7 @@ fn validate(ctx: &Ctx, plugin: &Plugin, reaper: bool) -> Result<()> {
 }
 
 /// The framework's own test host: loads the built CLAP binary, renders a chord and drives the
-/// web editor through a full UI → host → UI round trip.
+/// web view through a full UI → host → UI round trip.
 fn apf_host(ctx: &Ctx, clap: &Path) -> Result<String> {
     // apf-host is a member of this repository's workspace, whichever project the plugin is in.
     let meta = output(cmd("cargo").current_dir(&ctx.apf).args(["metadata", "--format-version", "1", "--no-deps"]))?;
@@ -1057,10 +1057,10 @@ fn apf_host(ctx: &Ctx, clap: &Path) -> Result<String> {
     };
     let resizes = text.lines().filter(|l| l.starts_with("gui-test:") && l.contains("resized to")).count();
     let resized = if resizes > 0 { format!("; {resizes} resizes followed") } else { String::new() };
-    if text.lines().any(|l| l.starts_with("gui-test:") && l.contains("no editor")) {
-        return Ok(format!("{} | editor: none, nothing to drive", pick("render:", "")));
+    if text.lines().any(|l| l.starts_with("gui-test:") && l.contains("no web view")) {
+        return Ok(format!("{} | web view: none, nothing to drive", pick("render:", "")));
     }
-    Ok(format!("{} | editor: {}{resized}", pick("render:", ""), pick("gui-test:", "ok after")))
+    Ok(format!("{} | web view: {}{resized}", pick("render:", ""), pick("gui-test:", "ok after")))
 }
 
 /// `apf-host --hot-test`: the shell's CLAP swaps in a newly published build.

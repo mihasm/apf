@@ -1,4 +1,4 @@
-# Editor reference
+# Web view reference
 
 The full surface of `apf.js`, the bridge between a plugin's page and the plugin. The header
 of `crates/apf-webview/src/apf.js` is the authority; this page follows it.
@@ -12,7 +12,7 @@ of `crates/apf-webview/src/apf.js` is the authority; this page follows it.
 | `data-param-text="key"` | any | the value as text ("1.20 kHz") |
 | `data-param-cc="key"` | any | the MIDI controller learned for the parameter ("CC 21") |
 | `data-apf-presets` | `div` | a preset bar: list, previous and next, save, replace, delete, and a mark when the sound was changed |
-| `data-apf-resize-grip` | `div` | a corner grip; hidden while the editor is not resizable |
+| `data-apf-resize-grip` | `div` | a corner grip; hidden while the web view is not resizable |
 | `data-apf-maximize` | `button` | toggles between the largest size the screen allows and the size before |
 
 Every bound control has a context menu (right-click or ctrl-click): MIDI learn, forget, the
@@ -32,7 +32,7 @@ default value.
 | `apf.log(...)` | write to the plugin's stderr |
 | `apf.keys.claim([...])` | take shortcuts such as `"cmd+d"` before the host does ("cmd" means Ctrl on Windows) |
 | `apf.sizeLimits`, `apf.resize(w, h)`, `apf.maximize()`, `apf.restore()` | resizing |
-| `apf.poller(fn, opts)` | adaptive polling; see [The web editor](web-editor.md) |
+| `apf.poller(fn, opts)` | adaptive polling; see [The web view](web-view.md) |
 
 `session` holds the current preset, the parameter waiting for MIDI learn, the learned
 controllers, and `controllers`: what the player's mod wheel (0 to 1), sustain pedal and pitch
@@ -78,10 +78,10 @@ The script API sits on HTTP-style endpoints that the framework serves to the pag
 
 The web view fills the host's view whenever its frame changes, in whichever order the host
 resizes the view and calls `set_size`, and keeps its minimum when a host lets the window get
-smaller than the editor's limits. The size the user chose is saved with the session (an
-`EDSZ` chunk). `fit_screen(margin)` on the `WebEditor` opens the editor at the size of the screen less
+smaller than the web view's limits. The size the user chose is saved with the session (an
+`EDSZ` chunk). `fit_screen(margin)` on the `WebView` opens the web view at the size of the screen less
 `margin` (room for the host window's title bar), within the size limits, for hosts that let the
-editor propose its size but not change it afterwards; a size the user chose in a session still
+web view propose its size but not change it afterwards; a size the user chose in a session still
 wins. `apf.maximize` asks for the largest size the screen allows.
 
 In Logic, Audio Unit v3 windows have no resize edge, so the page's grip is the way to resize

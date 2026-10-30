@@ -41,7 +41,7 @@
 pub mod clap;
 pub mod controller;
 pub mod dsp;
-pub mod editor;
+pub mod view;
 pub mod json;
 pub mod param;
 pub mod plugin;
@@ -50,7 +50,7 @@ pub mod queue;
 pub mod state;
 
 pub use controller::{Controller, ControllerRequest, ControllerResponse, HostHandle};
-pub use editor::{learnable_cc, Editor, EditorContext, ParentWindow};
+pub use view::{learnable_cc, View, ViewContext, ParentWindow};
 pub use param::{Curve, ParamDef, ParamId, ParamKind, Params};
 pub use plugin::{
     cc, AudioBuffer, AudioLayout, Event, Plugin, PluginInfo, ProcessConfig, ProcessContext, ProcessStatus, RemotePage, Transport,
@@ -63,7 +63,7 @@ pub mod prelude {
         Waveform,
     };
     pub use crate::{
-        cc, AudioBuffer, AudioLayout, Controller, ControllerRequest, ControllerResponse, Curve, Editor, Event, HostHandle, ParamDef,
+        cc, AudioBuffer, AudioLayout, Controller, ControllerRequest, ControllerResponse, Curve, View, Event, HostHandle, ParamDef,
         ParamId, Params, Plugin, PluginInfo, ProcessConfig, ProcessContext, ProcessStatus, RemotePage,
     };
 }

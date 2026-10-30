@@ -1,4 +1,4 @@
-// vst3-state-check — macOS: the main run loop, an off-screen window for the editor.
+// vst3-state-check — macOS: the main run loop, an off-screen window for the view.
 #include "platform.h"
 
 #import <AppKit/AppKit.h>
@@ -32,12 +32,12 @@ void pump(double seconds)
     } while (clock::now() < deadline);
 }
 
-bool showEditor(Steinberg::IPlugView* view, Steinberg::IPlugFrame* frame, double seconds,
+bool showView(Steinberg::IPlugView* view, Steinberg::IPlugFrame* frame, double seconds,
                 std::string& error)
 {
     if (view->isPlatformTypeSupported(Steinberg::kPlatformTypeNSView) != Steinberg::kResultTrue)
     {
-        error = "the editor does not support NSView";
+        error = "the view does not support NSView";
         return false;
     }
     Steinberg::ViewRect size;
@@ -57,7 +57,7 @@ bool showEditor(Steinberg::IPlugView* view, Steinberg::IPlugFrame* frame, double
         Steinberg::kResultTrue)
     {
         view->setFrame(nullptr);
-        error = "the editor did not attach";
+        error = "the view did not attach";
         return false;
     }
     [window setFrameOrigin:NSMakePoint(-20000, -20000)];

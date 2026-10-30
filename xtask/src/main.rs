@@ -1,11 +1,19 @@
 //! `cargo xtask` — builds a plugin crate into every format, installs and validates it.
 //!
-//!   cargo xtask bundle <package> [--project <dir>] [--debug] [--formats clap,vst3,auv2,auv3,standalone|all] [--install]
-//!   cargo xtask install <package> [--project <dir>] [--debug] [--formats ...] [--hot]
-//!   cargo xtask hot <package> [--project <dir>] [--debug] [--watch]
-//!   cargo xtask validate <package> [--project <dir>] [--debug] [--reaper]
+//!   cargo xtask bundle [<package>] [--project <dir>] [--debug] [--formats clap,vst3,auv2,auv3,standalone|all] [--install] [--verbose]
+//!   cargo xtask install [<package>] [--project <dir>] [--debug] [--formats ...] [--hot]
+//!   cargo xtask hot [<package>] [--project <dir>] [--debug] [--watch]
+//!   cargo xtask validate [<package>] [--project <dir>] [--debug] [--reaper]
 //!   cargo xtask notices [<package>] [--project <dir>] [--platform macos|windows|linux|all] [--out <file>]
 //!   cargo xtask new <name> [--path <folder>] [--vendor <text>] [--id-prefix <reverse.dns>] [--manufacturer <4 chars>]
+//!
+//! Run from a folder outside this repository (a project made by `cargo xtask new` has an
+//! alias for it), the project is the Cargo workspace of that folder, as if `--project` named
+//! it. The package can be left out when the workspace has one plugin (one package with
+//! `[package.metadata.apf]`).
+//!
+//! The CMake and compiler output of the wrapper build goes to `apf-build.log` in its build
+//! folder; its last lines are shown when it fails. `--verbose` shows all of it as it runs.
 //!
 //! `bundle` builds the plugin's Rust static library, then the wrapper CMake project
 //! (`wrapper/`), which links that library into each format with clap-wrapper. Finished
@@ -109,6 +117,8 @@ struct Ctx {
     release: bool,
     /// The hot-reload shell instead of the plugin (`--hot`, and the `hot` command).
     hot: bool,
+    /// `--verbose`: the wrapper build's output on the terminal instead of its log file.
+    verbose: bool,
 }
 
 impl Ctx {
@@ -150,21 +160,50 @@ fn main() -> ExitCode {
     }
 }
 
+const HELP: &str = "\
+usage: cargo xtask <command> [<plugin>] [options]
+
+  bundle <plugin>      build CLAP, VST3, AUv2 and the standalone app into dist/release/
+  install <plugin>     copy the built plugin where hosts find it
+  hot <plugin>         build the plugin and swap it into hosts running its hot-reload shell
+  validate <plugin>    run the validators on the built plugin
+  new <name>           start a plugin project of your own, next to this repository
+  notices [<plugin>]   print the licence texts a shipped plugin must carry
+
+<plugin> is a package name, such as example-02-gain. In a project with one plugin, such as
+one made by `cargo xtask new`, leave it out.
+
+options:
+  --install            bundle: install the result too
+  --formats <list>     clap,vst3,auv2,auv3,standalone or all (default: all but auv3, which needs Xcode)
+  --debug              a debug build instead of a release build
+  --hot                bundle, install: the hot-reload shell instead of the plugin (macOS)
+  --watch              hot: build and swap again on every saved change
+  --reaper             validate: also render in REAPER
+  --verbose            show the CMake and C++ compiler output
+  --project <dir>      a plugin in another Cargo workspace (default: the one you run it in)
+  new: --path <dir> --vendor <text> --id-prefix <org.example> --manufacturer <four characters>
+  notices: --platform macos|windows|linux|all --out <file>";
+
 fn usage() -> String {
-    "usage: cargo xtask <bundle|install|validate> <package> [--project <dir>] [--debug] [--formats clap,vst3,auv2,auv3,standalone] [--install] [--reaper] [--hot]\n       cargo xtask hot <package> [--project <dir>] [--debug] [--watch]\n       cargo xtask new <name> [--path <folder>] [--vendor <text>] [--id-prefix <reverse.dns>] [--manufacturer <4 chars>]\n       cargo xtask notices [<package>] [--project <dir>] [--platform macos|windows|linux|all] [--out <file>]"
-        .into()
+    HELP.into()
 }
 
 fn run() -> Result<()> {
     let mut args = env::args().skip(1);
-    let command = args.next().ok_or_else(usage)?;
+    let Some(command) = args.next().filter(|c| !matches!(c.as_str(), "-h" | "--help" | "help")) else {
+        println!("{HELP}");
+        return Ok(());
+    };
+    let apf_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().ok_or("xtask has no parent folder")?;
     if command == "new" {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().ok_or("xtask has no parent folder")?;
-        return new::run(root, args);
+        return new::run(apf_root, args);
     }
     if command == "notices" {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().ok_or("xtask has no parent folder")?;
-        return notices::run(root, args);
+        return notices::run(apf_root, args);
+    }
+    if !matches!(command.as_str(), "bundle" | "install" | "hot" | "validate") {
+        return Err(format!("unknown command '{command}'\n\n{HELP}"));
     }
     let mut package = None;
     let mut release = true;
@@ -172,6 +211,7 @@ fn run() -> Result<()> {
     let mut reaper = false;
     let mut hot = command == "hot";
     let mut watch = false;
+    let mut verbose = false;
     let mut project = None;
     let mut formats = Format::defaults();
     while let Some(arg) = args.next() {
@@ -183,6 +223,7 @@ fn run() -> Result<()> {
             "--reaper" => reaper = true,
             "--hot" => hot = true,
             "--watch" => watch = true,
+            "--verbose" | "-v" => verbose = true,
             "--formats" => {
                 let list = args.next().ok_or("--formats needs a list")?;
                 formats = if list == "all" {
@@ -200,16 +241,19 @@ fn run() -> Result<()> {
                 return Ok(());
             }
             _ if package.is_none() && !arg.starts_with('-') => package = Some(arg),
-            _ => return Err(format!("unexpected argument '{arg}'\n{}", usage())),
+            _ => return Err(format!("unexpected argument '{arg}'\n\n{HELP}")),
         }
     }
-    let package = package.ok_or_else(usage)?;
+    let project = match project {
+        Some(dir) => Some(dir),
+        None => current_project(apf_root),
+    };
     if command == "hot" {
         // The shell is always a release build; --debug is about the plugin's builds.
-        let (ctx, plugin) = load(&package, project.as_deref(), true, true)?;
+        let (ctx, plugin) = load(package.as_deref(), project.as_deref(), true, true, verbose)?;
         return if watch { hot_watch(&ctx, &plugin, !release) } else { publish(&ctx, &plugin, !release).map(|_| ()) };
     }
-    let (ctx, plugin) = load(&package, project.as_deref(), release || hot, hot)?;
+    let (ctx, plugin) = load(package.as_deref(), project.as_deref(), release || hot, hot, verbose)?;
     match command.as_str() {
         // The shell is built before it is installed, and gets a first build of the plugin.
         "bundle" | "install" if hot => {
@@ -245,6 +289,56 @@ fn run_cmd(c: &mut Command) -> Result<()> {
     if status.success() { Ok(()) } else { Err(format!("failed ({status}): {shown}")) }
 }
 
+/// Run a step of the wrapper build: with `--verbose` on the terminal, otherwise into `log`
+/// (appended), showing its last lines when it fails.
+fn run_logged(ctx: &Ctx, c: &mut Command, log: &Path) -> Result<()> {
+    if ctx.verbose {
+        return run_cmd(c);
+    }
+    let shown = format!("{c:?}");
+    let file = fs::OpenOptions::new().create(true).append(true).open(log).map_err(|e| format!("{}: {e}", log.display()))?;
+    let err = file.try_clone().map_err(|e| e.to_string())?;
+    let status = c.stdout(file).stderr(err).status().map_err(|e| format!("cannot run {shown}: {e}"))?;
+    if status.success() {
+        return Ok(());
+    }
+    let text = fs::read_to_string(log).unwrap_or_default();
+    let lines: Vec<&str> = text.lines().collect();
+    let tail = lines[lines.len().saturating_sub(40)..].join("\n");
+    Err(format!("failed ({status}): {shown}\n{tail}\nThe whole output is in {}", log.display()))
+}
+
+/// Run `c`, passing its error stream through as it comes (cargo's progress) except the lines
+/// `hide` picks; returns both streams.
+fn output_shown(c: &mut Command, hide: impl Fn(&str) -> bool) -> Result<String> {
+    use std::io::BufRead;
+    use std::process::Stdio;
+    let shown = format!("{c:?}");
+    let mut child = c.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("cannot run {shown}: {e}"))?;
+    let mut so = child.stdout.take().unwrap();
+    let t_out = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        let _ = std::io::Read::read_to_end(&mut so, &mut b);
+        b
+    });
+    let mut text = String::new();
+    let mut hid_last = false;
+    for line in std::io::BufReader::new(child.stderr.take().unwrap()).lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        // A hidden note's blank lines go with it.
+        let hidden = hide(&line) || (hid_last && line.trim().is_empty());
+        if !hidden {
+            eprintln!("{line}");
+        }
+        hid_last = hidden;
+        text.push_str(&line);
+        text.push('\n');
+    }
+    let status = child.wait().map_err(|e| e.to_string())?;
+    text.insert_str(0, &String::from_utf8_lossy(&t_out.join().unwrap_or_default()));
+    if status.success() { Ok(text) } else { Err(format!("failed ({status}): {shown}")) }
+}
+
 fn output(c: &mut Command) -> Result<String> {
     let shown = format!("{c:?}");
     let out = c.output().map_err(|e| format!("cannot run {shown}: {e}"))?;
@@ -258,7 +352,19 @@ fn hash(text: &str) -> u64 {
     text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
 }
 
-fn load(package: &str, project: Option<&Path>, release: bool, hot: bool) -> Result<(Ctx, Plugin)> {
+/// The Cargo workspace of the current folder when that is outside this repository: a
+/// project's own alias for xtask (written by `cargo xtask new`) runs it there.
+fn current_project(apf_root: &Path) -> Option<PathBuf> {
+    let cwd = canonical(&env::current_dir().ok()?).ok()?;
+    if cwd.starts_with(canonical(apf_root).ok()?) {
+        return None;
+    }
+    let out = cmd("cargo").args(["locate-project", "--workspace", "--message-format", "plain"]).current_dir(&cwd).output().ok()?;
+    let manifest = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
+    if out.status.success() { manifest.parent().map(Path::to_path_buf) } else { None }
+}
+
+fn load(package: Option<&str>, project: Option<&Path>, release: bool, hot: bool, verbose: bool) -> Result<(Ctx, Plugin)> {
     // xtask is a member of this repository's workspace; the wrapper project is next to it.
     let apf_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().ok_or("xtask has no parent folder")?.to_path_buf();
     let project = match project {
@@ -283,15 +389,22 @@ fn load(package: &str, project: Option<&Path>, release: bool, hot: bool) -> Resu
     let meta: Value = serde_json::from_str(&meta).map_err(|e| format!("cargo metadata: {e}"))?;
     let root = PathBuf::from(meta["workspace_root"].as_str().ok_or("no workspace_root")?);
     let target_dir = PathBuf::from(meta["target_directory"].as_str().ok_or("no target_directory")?);
-    let pkg = meta["packages"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let packages: Vec<&Value> = meta["packages"].as_array().into_iter().flatten().collect();
+    // A plugin is a package with packaging settings.
+    let plugins: Vec<&str> = packages.iter().filter(|p| !p["metadata"]["apf"].is_null()).filter_map(|p| p["name"].as_str()).collect();
+    let list = || if plugins.is_empty() { "none".to_owned() } else { plugins.join(", ") };
+    let package = match package {
+        Some(p) => p,
+        None if plugins.len() == 1 => plugins[0],
+        None => return Err(format!("name the plugin to build: cargo xtask <command> <plugin>\nplugins in {}: {}", root.display(), list())),
+    };
+    let pkg = packages
+        .iter()
         .find(|p| p["name"] == package)
-        .ok_or_else(|| format!("no package '{package}' in the workspace {}", root.display()))?;
+        .ok_or_else(|| format!("no package '{package}' in {}\nplugins there: {}", root.display(), list()))?;
     let apf = &pkg["metadata"]["apf"];
     if apf.is_null() {
-        return Err(format!("{package} has no [package.metadata.apf] section"));
+        return Err(format!("{package} is not a plugin: its Cargo.toml has no [package.metadata.apf] section\nplugins in {}: {}", root.display(), list()));
     }
     let get = |key: &str| -> Result<String> {
         apf[key].as_str().map(str::to_owned).ok_or_else(|| format!("[package.metadata.apf] of {package} lacks '{key}'"))
@@ -343,7 +456,7 @@ fn load(package: &str, project: Option<&Path>, release: bool, hot: bool) -> Resu
     // The shell's wrapper builds are folders of their own, so switching between the shell and
     // the plugin never relinks the other's.
     let key = if hot { format!("{key}-hot") } else { key };
-    Ok((Ctx { apf: apf_root, root, manifest, out, target_dir, key, release, hot }, plugin))
+    Ok((Ctx { apf: apf_root, root, manifest, out, target_dir, key, release, hot, verbose }, plugin))
 }
 
 /// Build the Rust static library; returns its path and the native libraries it needs. With
@@ -371,8 +484,8 @@ fn build_rust(ctx: &Ctx, plugin: &Plugin) -> Result<(PathBuf, Vec<String>)> {
     if cfg!(target_os = "macos") {
         c.env("MACOSX_DEPLOYMENT_TARGET", "11.0");
     }
-    let text = output(&mut c)?;
-    print!("{}", text.lines().filter(|l| !l.contains("native-static-libs")).map(|l| format!("{l}\n")).collect::<String>());
+    // rustc's list of native libraries is for this tool, not for the reader.
+    let text = output_shown(&mut c, |l| l.contains("native-static-libs") || l.starts_with("note: link against the following native artifacts"))?;
 
     // rustc prints the list only when it actually compiled the crate; keep the last one.
     let cache = ctx.work().join(format!("{}-{}.native-libs", ctx.key, ctx.profile()));
@@ -474,10 +587,46 @@ fn configure(ctx: &Ctx, plugin: &Plugin, build_dir: &Path, formats: &[&str], xco
     if cfg!(target_os = "macos") {
         c.arg(format!("-DCMAKE_OSX_ARCHITECTURES={}", std::env::consts::ARCH.replace("aarch64", "arm64")));
     }
-    run_cmd(&mut c)
+    run_logged(ctx, &mut c, &build_dir.join("apf-build.log"))
+}
+
+/// Start a wrapper build's log, and say what the first build of a folder costs.
+fn start_wrapper_build(ctx: &Ctx, build_dir: &Path, title: &str, xcode: bool) -> Result<PathBuf> {
+    println!("== Wrappers: {title}");
+    if !build_dir.join("CMakeCache.txt").exists() {
+        // Each of these has a build folder of its own.
+        let kind: String = [(!ctx.release, "debug "), (ctx.hot, "hot-reload shell "), (xcode, "AUv3 ")]
+            .iter()
+            .filter(|(on, _)| *on)
+            .map(|(_, word)| *word)
+            .collect();
+        println!(
+            "   first {kind}build of this plugin: downloads clap-wrapper and the plugin SDKs (about 50 MB) and compiles them; under a minute on a recent Mac with a fast connection"
+        );
+    }
+    fs::create_dir_all(build_dir).map_err(|e| format!("cannot create {}: {e}", build_dir.display()))?;
+    let log = build_dir.join("apf-build.log");
+    fs::write(&log, "").map_err(|e| format!("{}: {e}", log.display()))?;
+    Ok(log)
+}
+
+/// The tools the wrapper build needs, checked before anything is compiled.
+fn check_build_tools(formats: &BTreeSet<Format>) -> Result<()> {
+    if !have("cmake") {
+        let how = if cfg!(target_os = "macos") { "brew install cmake, or https://cmake.org/download" } else { "https://cmake.org/download" };
+        return Err(format!("CMake (3.24 or newer) is needed to build the plugin formats: {how}"));
+    }
+    if cfg!(target_os = "macos") && !cmd("xcrun").args(["--find", "clang++"]).output().is_ok_and(|o| o.status.success()) {
+        return Err("a C++ compiler is needed to build the plugin formats: xcode-select --install".into());
+    }
+    if formats.contains(&Format::Auv3) && !cmd("xcodebuild").arg("-version").output().is_ok_and(|o| o.status.success()) {
+        return Err("AUv3 is built with Xcode, the full app from the App Store (the command line tools are not enough); leave auv3 out of --formats without it".into());
+    }
+    Ok(())
 }
 
 fn bundle(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Result<()> {
+    check_build_tools(formats)?;
     let (staticlib, libs) = build_rust(ctx, plugin)?;
     let dist = ctx.dist();
     fs::create_dir_all(&dist).map_err(|e| e.to_string())?;
@@ -496,9 +645,10 @@ fn bundle(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Result<()> 
         main.push("STANDALONE");
     }
     let dir = ctx.build_dir(false);
-    println!("== Wrappers: {}", main.join(", "));
+    let names: Vec<&str> = main.iter().map(|f| match *f { "AUV2" => "AUv2", "STANDALONE" => "standalone", f => f }).collect();
+    let log = start_wrapper_build(ctx, &dir, &names.join(", "), false)?;
     configure(ctx, plugin, &dir, &main, false, &staticlib, &libs)?;
-    run_cmd(cmd("cmake").arg("--build").arg(&dir).args(["--config", build_type, "--target", &format!("{target}_all")]))?;
+    run_logged(ctx, cmd("cmake").arg("--build").arg(&dir).args(["--config", build_type, "--target", &format!("{target}_all")]), &log)?;
     let assets = dir.join("assets");
     if formats.contains(&Format::Auv2) && cfg!(target_os = "macos") {
         restore_auv2_info_plist(&dir, &assets.join(format!("{}.component", plugin.name)), &target)?;
@@ -524,16 +674,16 @@ fn bundle(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Result<()> 
             return Err("AUv3 is macOS only".into());
         }
         let xdir = ctx.build_dir(true);
-        println!("== Wrappers: AUv3 (Xcode)");
+        let log = start_wrapper_build(ctx, &xdir, "AUv3 (Xcode)", true)?;
         configure(ctx, plugin, &xdir, &["CLAP", "AUV3"], true, &staticlib, &libs)?;
-        run_cmd(cmd("cmake").arg("--build").arg(&xdir).args([
+        run_logged(ctx, cmd("cmake").arg("--build").arg(&xdir).args([
             "--config",
             build_type,
             "--target",
             &format!("{target}_auv3_standalone"),
             "--",
             "-quiet",
-        ]))?;
+        ]), &log)?;
         // Multi-config generators put products in a folder per configuration.
         let app = xdir.join("assets").join(build_type).join(format!("{} AUv3.app", plugin.name));
         if !app.exists() {
@@ -572,7 +722,6 @@ fn restore_auv2_info_plist(build_dir: &Path, component: &Path, target: &str) -> 
     let plist = component.join("Contents/Info.plist");
     if fs::read_to_string(&plist).ok().as_deref() != Some(text.as_str()) {
         fs::write(&plist, &text).map_err(|e| format!("cannot write {}: {e}", plist.display()))?;
-        println!("   restored the AUv2 Info.plist (AudioComponents)");
     }
     Ok(())
 }
@@ -641,7 +790,7 @@ fn sign(path: &Path) -> Result<()> {
         return Ok(());
     }
     let identity = env::var("APF_CODESIGN_IDENTITY").unwrap_or_else(|_| "-".into());
-    run_cmd(cmd("codesign").args(["--force", "--sign", &identity, "--timestamp=none"]).arg(path))?;
+    output(cmd("codesign").args(["--force", "--sign", &identity, "--timestamp=none"]).arg(path))?;
     output(cmd("codesign").args(["--verify", "--strict"]).arg(path)).map(|_| ())
 }
 
@@ -682,6 +831,7 @@ fn install_windows(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Re
         })?;
         println!("   {}", dst.display());
     }
+    println!("== Installed. A host that is running finds it after a plugin rescan or a restart.");
     Ok(())
 }
 
@@ -730,8 +880,9 @@ fn install_bundles(ctx: &Ctx, plugin: &Plugin, formats: &BTreeSet<Format>) -> Re
     }
     if au {
         // Make the AU registry pick up the new component at once instead of after a re-login.
-        let _ = cmd("killall").args(["-9", "AudioComponentRegistrar"]).status();
+        let _ = cmd("killall").args(["-9", "AudioComponentRegistrar"]).output();
     }
+    println!("== Installed. A host that is running finds it after a plugin rescan or a restart.");
     Ok(())
 }
 

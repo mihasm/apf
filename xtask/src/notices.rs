@@ -10,7 +10,8 @@
 //!
 //! "Ends up in the plugin" means: reachable from the package through normal dependencies
 //! (build scripts and dev-dependencies do not ship), for the targets of the chosen
-//! platform. Without a package, the framework itself (`apf` and `apf-webview`). Crates with
+//! platform. Without a package, the plugins of the project it runs in, or in this repository
+//! the framework itself (`apf` and `apf-webview`). Crates with
 //! the same licence text are listed together under one copy of it. A crate whose sources
 //! carry no licence file is named in a closing section and on stderr: its notice has to be
 //! added by hand (docs/licences.md).
@@ -215,17 +216,37 @@ fn licence_files(dir: &Path) -> Vec<(String, String)> {
 
 pub fn run(apf_root: &Path, args: impl Iterator<Item = String>) -> Result<()> {
     let o = parse(args)?;
-    let (root, manifest) = match &o.project {
+    let (root, manifest) = match o.project.clone().or_else(|| crate::current_project(apf_root)) {
         Some(dir) => {
-            let dir = fs::canonicalize(dir).map_err(|e| format!("--project {}: {e}", dir.display()))?;
+            let dir = fs::canonicalize(&dir).map_err(|e| format!("--project {}: {e}", dir.display()))?;
             let manifest = dir.join("Cargo.toml");
             (dir, Some(manifest))
         }
         None => (apf_root.to_path_buf(), None),
     };
-    let roots: Vec<String> = match &o.package {
-        Some(p) => vec![p.clone()],
-        None => vec!["apf".into(), "apf-webview".into()],
+    let roots: Vec<String> = match (&o.package, &manifest) {
+        (Some(p), _) => vec![p.clone()],
+        // In a plugin's own project: its plugins.
+        (None, Some(m)) => {
+            let out = Command::new("cargo")
+                .args(["metadata", "--format-version", "1", "--no-deps", "--manifest-path"])
+                .arg(m)
+                .output()
+                .map_err(|e| format!("cannot run cargo metadata: {e}"))?;
+            let meta: Value = serde_json::from_slice(&out.stdout).map_err(|e| format!("cargo metadata: {e}"))?;
+            let plugins: Vec<String> = meta["packages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|p| !p["metadata"]["apf"].is_null())
+                .filter_map(|p| p["name"].as_str().map(str::to_owned))
+                .collect();
+            if plugins.is_empty() {
+                return Err(format!("no plugin (a package with [package.metadata.apf]) in {}", root.display()));
+            }
+            plugins
+        }
+        (None, None) => vec!["apf".into(), "apf-webview".into()],
     };
 
     // The union over the platforms' targets.

@@ -3,8 +3,8 @@
 //!
 //! The source and the test are the example's own files, compiled into xtask with
 //! `include_str!`, so the scaffold can never drift from the example. The project is
-//! standalone (its own workspace, `apf` by path); build it with
-//! `cargo xtask bundle <name> --project <dir>`.
+//! standalone (its own workspace, `apf` by path). Its `.cargo/config.toml` points `cargo xtask`
+//! at this repository's xtask, so `cargo xtask bundle` works in the project's own folder.
 //!
 //! Wire-up in `main.rs`: `mod new;` and, in `run`, handle the command before `load`:
 //! `if command == "new" { return new::run(&apf_root, args); }` where `args` is the rest of
@@ -152,11 +152,20 @@ codegen-units = 1
         vendor = o.vendor,
     );
     let readme = format!(
-        "# {title}\n\nMade with `cargo xtask new {name}` from example 01 of APF.\n\n```sh\ncargo test\n# in the APF repository:\ncargo xtask bundle {name} --project {dir}\n```\n\nBefore you release: check `[package.metadata.apf]` in `Cargo.toml`. The bundle id and the\nAudio Unit codes are stored in your users' projects and can never change.\n",
+        "# {title}\n\nAn audio plugin made with [APF](https://mihasm.github.io/apf/) (`cargo xtask new {name}`), starting\nfrom its example 01: a sine wave that follows MIDI notes.\n\n```sh\ncargo test                      # plays a note in memory, no sound card\ncargo xtask bundle --install    # builds CLAP, VST3, AUv2 and the app into dist/release/, installs them\n```\n\n`cargo xtask` is APF's build tool, run from `{xtask}` (see `.cargo/config.toml`).\n\nBefore you release, check `[package.metadata.apf]` in `Cargo.toml`: the bundle id and the\nAudio Unit codes are stored in your users' projects and can never change.\n",
         name = o.name,
-        dir = dir.display(),
+        xtask = rel(""),
     );
-    vec![("Cargo.toml", manifest), ("src/lib.rs", lib), ("tests/process.rs", test), ("README.md", readme), (".gitignore", "/target\n/dist\n".into())]
+    // `cargo xtask` in the project runs APF's xtask; it builds the workspace it is run in.
+    let config = format!("[alias]\nxtask = \"run --quiet --manifest-path {} --\"\n", rel("xtask/Cargo.toml"));
+    vec![
+        ("Cargo.toml", manifest),
+        ("src/lib.rs", lib),
+        ("tests/process.rs", test),
+        ("README.md", readme),
+        (".cargo/config.toml", config),
+        (".gitignore", "/target\n/dist\n".into()),
+    ]
 }
 
 /// `target` relative to `from` (both absolute), with `..` where needed.
@@ -189,10 +198,19 @@ pub fn run(apf_root: &Path, args: impl Iterator<Item = String>) -> Result<(), St
         fs::create_dir_all(file.parent().unwrap_or(&dir)).map_err(|e| format!("{}: {e}", file.display()))?;
         fs::write(&file, text).map_err(|e| format!("{}: {e}", file.display()))?;
     }
-    println!("created {}", dir.display());
-    println!("  cd {} && cargo test", dir.display());
-    println!("  cargo xtask bundle {} --project {}    (in the APF repository)", o.name, dir.display());
-    println!("Set --vendor, --id-prefix and --manufacturer now (or edit Cargo.toml): the identifiers are permanent once released.");
+    println!("Created {}: a sine instrument, from example 01.\n", dir.display());
+    println!("  cd {}", dir.display());
+    println!("  cargo test                      # plays a note in memory");
+    println!("  cargo xtask bundle --install    # builds CLAP, VST3, AUv2 and the app, installs them\n");
+    println!(
+        "Its identity, stored in every host project that uses it: bundle id {}.{}, Audio Unit aumu {} {}, vendor \"{}\".",
+        o.id_prefix,
+        o.name,
+        subtype(&o.name),
+        o.manufacturer,
+        o.vendor
+    );
+    println!("Change it in Cargo.toml and src/lib.rs before you release; it cannot change after.");
     Ok(())
 }
 
@@ -227,5 +245,6 @@ mod tests {
         assert!(test.contains("my_synth::apf_entry_init"));
         assert!(manifest.contains("path = \"../apf/crates/apf\"") && manifest.contains("bundle-id = \"org.ann.my-synth\""));
         assert!(manifest.contains("au-manufacturer = \"AnnS\"") && manifest.contains("[workspace]"));
+        assert!(get(".cargo/config.toml").contains("--manifest-path ../apf/xtask/Cargo.toml"));
     }
 }

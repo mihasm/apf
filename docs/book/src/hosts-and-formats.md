@@ -42,6 +42,10 @@ au-manufacturer = "MiSm"   # four characters, at least one capital; yours, the s
 au-manufacturer-name = "Miha Smrekar"
 ```
 
+Optional: `au-v3-name` (the name hosts list the AUv3 under, when the AUv2 is installed beside
+it), `au-check-preset` (a factory preset `cargo xtask validate` loads for its Audio Unit MIDI
+check, when the default sound would not show a released key).
+
 **These identifiers are forever.** The CLAP id, the bundle id and the Audio Unit codes are
 stored in every project a user saves. Change one after release and the host no longer finds the
 plugin. The AUv3 takes the first three characters of the subtype plus `3`, so two plugins of

@@ -21,6 +21,7 @@
 |---|---|
 | `scripts/reaper-render-test.sh` | loads the installed CLAP, VST3 and AU in REAPER, renders and compares |
 | `scripts/au-automation-check.swift` | while a host plays automation, the AUv3's parameter tree (what the host's own knobs read, such as Logic's Smart Controls) follows it (wrapper patch 0006) |
+| `scripts/au-legato-check.swift` | an AUv3 instrument keeps sounding when a held note is struck again legato (a note-off and a note-on of the key on one sample; wrapper patch 0007); `--preset NAME` loads a factory preset first |
 | `scripts/au-state-check.swift` | a restored session sounds the same with the editor closed and opened, in seven restore orders (AUv3 out of process, AUv2 with `--in-process`, an uninstalled AUv2 build with `--bundle`, a host's saved state with `--state`) |
 | `scripts/au-probe.swift` | an installed AU as Logic sees it: parameters, groups, factory presets (`--preset N` selects one); `--gui S --resize [--in-process]` checks that the editor follows its window; `--gui S --keys [--in-process]` that keys the page leaves reach the host whole (key-down, key-up, modifiers) |
 | `tools/vst3-state-check` | the same session check for VST3, headless and portable (C++17, VST3 SDK hosting): a restored session sounds as saved in seven restore orders, the controller shows the restored values and the processor holds them; `--editor` adds the editor opened (off screen) against closed, `--state` a host's saved `.vstpreset`, `--inject-stale` checks the check. Built and run by `cargo xtask validate` |
@@ -38,6 +39,7 @@
 | 0004 | editor resizing in Audio Unit hosts |
 | 0005 | a restored session keeps its parameter values (AUv2 and AUv3) |
 | 0006 | the AUv3 parameter tree follows host automation |
+| 0007 | AUv3: a note struck again legato keeps its key |
 
 ## Packaging settings
 

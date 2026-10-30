@@ -199,6 +199,13 @@ entries keep what is worth knowing if you meet something similar.
   with every configuration within the editor's limits.
 - **AUv3 parameter tree follows host automation (0006):** what the host's own knobs read, such as
   Logic's Smart Controls, follows automation (`scripts/au-automation-check.swift`).
+- **AUv3 legato repeats keep their key (0007):** clap-wrapper reorders a same-sample note-off and
+  note-on of one key into on-then-off when it thinks the key is not playing (a fast tap the AU
+  scheduler reordered). It forgot the keys held from earlier render cycles, so every legato
+  repeat of a held key (two touching notes of one pitch in a DAW) ended with the key released.
+  A voice that pairs note-offs by note id survived (the late off names the earlier note); a
+  part that goes by the key alone, such as an arpeggiator's held keys, lost the key. Checked by
+  `scripts/au-legato-check.swift`.
 
 ## Validators
 

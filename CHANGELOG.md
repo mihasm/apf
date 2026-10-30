@@ -21,6 +21,16 @@ versions.
 - `docs/licences.md` lists every component and its licence; `deny.toml` lets `cargo deny`
   check them; `cargo xtask notices` prints the licence texts a shipped plugin must carry.
 - `docs/todo.md`: the known open work.
+- `scripts/au-legato-check.swift`, run by `cargo xtask validate` for AUv3 instruments: a note
+  struck again legato keeps sounding. `au-check-preset` in `[package.metadata.apf]` names a
+  factory preset for it to load.
+
+### Fixed
+
+- AUv3: a note struck again legato (a note-off and the next note-on of the same key on one
+  sample, as a DAW plays two touching notes of one pitch) was released one sample after it
+  started when the key had been struck in an earlier render cycle: clap-wrapper's guard against
+  reordered fast taps forgot the keys held across cycles (wrapper patch 0007).
 
 ### Changed
 

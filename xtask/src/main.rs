@@ -78,6 +78,9 @@ struct Plugin {
     au_v3_subtype: String,
     /// The name hosts list the AUv3 under (`au-v3-name`); `None` keeps the plugin's name.
     au_v3_name: Option<String>,
+    /// A factory preset the Audio Unit MIDI check loads (`au-check-preset`): one whose sound
+    /// shows a released key, where the default sound might not.
+    au_check_preset: Option<String>,
     au_manufacturer: String,
     au_manufacturer_name: String,
 }
@@ -288,6 +291,7 @@ fn load(package: &str, project: Option<&Path>, release: bool) -> Result<(Ctx, Pl
         // With the AUv2 installed as well, a host lists two instruments of the same name;
         // this one tells them apart ("Synth (AUv3)").
         au_v3_name: get("au-v3-name").ok(),
+        au_check_preset: get("au-check-preset").ok(),
         au_subtype,
         au_manufacturer: get("au-manufacturer")?,
         au_manufacturer_name: get("au-manufacturer-name")?,
@@ -734,6 +738,14 @@ fn validate(ctx: &Ctx, plugin: &Plugin, reaper: bool) -> Result<()> {
                 "au-automation-check (AUv3)",
                 swift_check(ctx, "au-automation-check", &[&plugin.au_type, &plugin.au_v3_subtype, &plugin.au_manufacturer]),
             );
+            // A note struck again legato keeps sounding (wrapper patch 0007).
+            if plugin.au_type == "aumu" || plugin.au_type == "aumf" {
+                let mut args = vec![plugin.au_type.as_str(), &plugin.au_v3_subtype, &plugin.au_manufacturer];
+                if let Some(preset) = &plugin.au_check_preset {
+                    args.extend(["--preset", preset]);
+                }
+                report("au-legato-check (AUv3)", swift_check(ctx, "au-legato-check", &args));
+            }
         }
     }
     if reaper {

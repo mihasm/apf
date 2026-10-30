@@ -1,0 +1,70 @@
+diff --git a/src/detail/auv3/process.h b/src/detail/auv3/process.h
+index 04302fc..a4a11d0 100644
+--- a/src/detail/auv3/process.h
++++ b/src/detail/auv3/process.h
+@@ -131,6 +131,11 @@ class ProcessAdapter
+   // same-block NOTE_ON/NOTE_OFF pairs. See process.mm for the full
+   // rationale and behaviour.
+   void reorderSameSampleOrphanOffs(AVAudioFrameCount frameCount);
++  static uint32_t packNoteKey(int16_t port, int16_t channel, int16_t key)
++  {
++    return ((uint32_t)(uint16_t)port << 16) | ((uint32_t)(uint16_t)channel << 8) |
++           ((uint32_t)(uint16_t)(key & 0x7f));
++  }
+ 
+  public:
+   // Snapshot of the parameter-id → cookie map, copied at allocate time
+diff --git a/src/detail/auv3/process.mm b/src/detail/auv3/process.mm
+index 7b24f7a..a5e1ad7 100644
+--- a/src/detail/auv3/process.mm
++++ b/src/detail/auv3/process.mm
+@@ -196,7 +196,7 @@ void ProcessAdapter::setupProcessing(uint32_t numInputBusses, const uint32_t *in
+   _activeNotes.clear();
+   _activeNotes.reserve(32);
+   _reorderScratch.clear();
+-  _reorderScratch.reserve(128);
++  _reorderScratch.reserve(1024);
+   _nextNoteId = 0;
+ }
+ 
+@@ -241,19 +241,19 @@ void ProcessAdapter::reorderSameSampleOrphanOffs(AVAudioFrameCount frameCount)
+   // the off strictly after the on.
+   //
+   // A legitimate retrigger [NOTE_OFF, NOTE_ON] for a key whose voice IS
+-  // playing hits the "already active" branch and is left untouched.
++  // playing hits the "already active" branch and is left untouched. "Playing"
++  // includes the keys held from earlier cycles: process() seeds the scratch
++  // with them. Starting from an empty set made every legato repeat of a held
++  // key (a note ending exactly where the next note of that pitch starts, the
++  // usual case in a DAW) look like a reordered tap: its NOTE_ON went first and
++  // its NOTE_OFF one sample later, so the key ended released while the host
++  // holds it.
+   if (_eventindices.empty()) return;
+ 
+   // Reused member scratch — a local vector would malloc/free on the render
+   // thread every cycle.
+   auto &active = _reorderScratch;
+-  active.clear();
+-
+-  auto packKey = [](int16_t port, int16_t channel, int16_t key) -> uint32_t
+-  {
+-    return ((uint32_t)(uint16_t)port << 16) | ((uint32_t)(uint16_t)channel << 8) |
+-           ((uint32_t)(uint16_t)(key & 0x7f));
+-  };
++  auto packKey = packNoteKey;
+ 
+   for (size_t i = 0; i < _eventindices.size(); ++i)
+   {
+@@ -653,6 +653,12 @@ AUAudioUnitStatus ProcessAdapter::process(AudioUnitRenderActionFlags *actionFlag
+     }
+   }
+ 
++  // The keys sounding before this cycle's events (translation updates _activeNotes as it
++  // goes): the orphan-off guard below starts from them.
++  _reorderScratch.clear();
++  for (const auto &n : _activeNotes)
++    if (n.used) _reorderScratch.push_back(packNoteKey(n.port_index, n.channel, n.key));
++
+ #if 1
+   // Translate AUv3 events to CLAP events
+   if (realtimeEventListHead)

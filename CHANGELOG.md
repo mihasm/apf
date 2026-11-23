@@ -9,6 +9,11 @@ versions.
 
 ### Added
 
+- `apf.files.choose({folders, multiple, types, message})` in the web view: the system's open
+  panel (macOS), resolving to the chosen files' or folders' paths, for a controller that keeps
+  a folder in place or reads files again later (`GET /__apf/files/choose`). Elsewhere it
+  resolves to `null` and the page uses a file input.
+
 - Hot reload for development (macOS): `cargo xtask install <plugin> --hot` installs a shell
   (`crates/apf-hot`) in every format, and `cargo xtask hot <plugin> [--watch]` builds the
   plugin and swaps it into every running instance in the host. State, the web view and the
@@ -43,6 +48,8 @@ versions.
 
 ### Fixed
 
+- `apf-host --screenshot` aborted in a debug build: `-[NSData bytes]` was declared to return
+  `*const u8`, which objc2's type check refuses (`const void *` is `^v`).
 - `cargo xtask validate` on an effect: `vst3-state-check` and `au-state-check` fed the effect
   silence (and the AUv2's input bus was off), so every scenario compared silence and failed.
   An effect (VST3 Fx, AU `aufx` or `aumf`) now gets a test signal on its main input, a sine in

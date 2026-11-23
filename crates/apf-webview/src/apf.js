@@ -31,6 +31,10 @@
 //                                    (an edit, a preset, a session loaded by the host)
 // A reply with an error status rejects with an Error carrying .status and .body (its text).
 //
+// apf.files.choose({folders, multiple, types: ["wav"], message}) opens the system's open panel
+// and resolves to the chosen paths ([] when cancelled), or to null where there is none yet
+// (Windows, Linux: use <input type="file">, which gives contents instead of paths).
+//
 // Resizing (a resizable web view): apf.sizeLimits {min: [w, h], max: [w, h]} or null;
 // apf.resize(width, height) asks the host for a new size (it answers with the window's new
 // size, the page then gets a resize event); <div data-apf-resize-grip></div> is a corner grip
@@ -227,6 +231,12 @@
       onChange(fn) {
         revisionListeners.push(fn);
       },
+    },
+    files: {
+      choose: ({ folders = false, multiple = false, types = [], message = "" } = {}) =>
+        call("files/choose", { folders: folders ? 1 : 0, multiple: multiple ? 1 : 0, types: types.join(","), message }).then((r) =>
+          r && r.ok ? r.paths : null,
+        ),
     },
     bind,
     // A line in the plugin's log (stderr): hosts show no web console.

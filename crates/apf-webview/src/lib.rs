@@ -23,6 +23,12 @@
 //!   carries the controller's revision (`rev`), so the page hears of changes from elsewhere.
 //! * `POST /__apf/echo` – answers the body's length and FNV-1a hash; `apf-host --gui-test`
 //!   checks with it that the webview delivers request bodies intact.
+//! * `GET /__apf/files/choose?folders=0|1&multiple=0|1&types=wav,aif&message=` – the system's
+//!   open panel (`apf.files.choose`): `{"ok":true,"paths":[...]}` with the chosen files or
+//!   folders (none when cancelled), `{"ok":false,"unsupported":true}` where it is not built
+//!   yet (Windows and Linux: there the page falls back to `<input type="file">`, which gives
+//!   it the files' contents but not their paths). Unlike a file input, it gives the plugin
+//!   paths: folders kept where they are, files read again later.
 //! * `window.ipc.postMessage("begin i" | "set i normalized" | "end i")` – edits;
 //!   `"log text"` writes a line to the plugin's stderr (`apf.log`).
 //!
@@ -988,6 +994,30 @@ mod mac {
     }
 
     /// wry's own `set_bounds` needs the view to be in a window; this does not.
+    /// The system's open panel, modal: the chosen paths, none when cancelled. `types` are file
+    /// name extensions (any file when empty).
+    pub fn choose(folders: bool, multiple: bool, types: &[String], message: &str) -> Vec<String> {
+        use objc2_app_kit::{NSModalResponseOK, NSOpenPanel};
+        use objc2_foundation::NSString;
+        let Some(mtm) = MainThreadMarker::new() else { return Vec::new() };
+        let panel = NSOpenPanel::openPanel(mtm);
+        panel.setCanChooseFiles(!folders);
+        panel.setCanChooseDirectories(folders);
+        panel.setAllowsMultipleSelection(multiple);
+        if !message.is_empty() {
+            panel.setMessage(Some(&NSString::from_str(message)));
+        }
+        if !types.is_empty() && !folders {
+            let types: Vec<Retained<NSString>> = types.iter().map(|t| NSString::from_str(t)).collect();
+            #[allow(deprecated)]
+            panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&types)));
+        }
+        if panel.runModal() != NSModalResponseOK {
+            return Vec::new();
+        }
+        panel.URLs().iter().filter_map(|url| url.path().map(|p| p.to_string())).collect()
+    }
+
     pub fn set_frame(webview: &WebView, width: u32, height: u32) {
         let view = webview.webview();
         view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64)));
@@ -1066,6 +1096,7 @@ fn serve(
             return json(format!("{{\"method\":\"{}\",\"length\":{},\"fnv1a\":{hash}}}", request.method().as_str(), body.len()));
         }
         "__apf/presets" => return json(presets_json(ctx)),
+        "__apf/files/choose" => return json(choose_json(query)),
         "__apf/preset/load" => {
             let result = query_arg(query, "id").and_then(|id| Source::from_id(&id)).ok_or("no such preset".to_string());
             return json(outcome(result.and_then(|s| ctx.load_preset(&s))));
@@ -1200,6 +1231,36 @@ fn handle_message(ctx: &ViewContext, sizing: &Sizing, page: &PageLink, msg: &str
             }
         }
         _ => {}
+    }
+}
+
+/// `/__apf/files/choose`: the system's open panel, modal, on the main thread.
+fn choose_json(query: &str) -> String {
+    #[cfg(target_os = "macos")]
+    {
+        let flag = |k: &str| query_arg(query, k).as_deref() == Some("1");
+        let types: Vec<String> = query_arg(query, "types")
+            .unwrap_or_default()
+            .split(',')
+            .map(|t| t.trim().trim_start_matches('.').to_owned())
+            .filter(|t| !t.is_empty())
+            .collect();
+        let message = query_arg(query, "message").unwrap_or_default();
+        let paths = mac::choose(flag("folders"), flag("multiple"), &types, &message);
+        let mut out = String::from("{\"ok\":true,\"paths\":[");
+        for (i, p) in paths.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            json_str(&mut out, p);
+        }
+        out.push_str("]}");
+        out
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = query;
+        "{\"ok\":false,\"unsupported\":true}".into()
     }
 }
 

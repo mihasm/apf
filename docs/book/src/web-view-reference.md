@@ -64,6 +64,19 @@ a controller the plugin answers 404. WKWebView delivers POST bodies to wry's pro
 intact (wry reads `HTTPBody` or the body stream); `apf-host --gui-test` checks a 1 MiB binary
 and a UTF-8 JSON body.
 
+### Files
+
+| Function | |
+|---|---|
+| `apf.files.choose({folders, multiple, types, message})` | the system's open panel; resolves to the chosen paths (`[]` when cancelled), or `null` where there is none yet |
+
+The panel gives the plugin paths, which an `<input type="file">` does not: a folder the user
+keeps where it is, files the controller reads again later. `types` are file name extensions
+(`["wav"]`). It is built for macOS (`NSOpenPanel`); on Windows and Linux it resolves to `null`,
+and the page falls back to a file input, whose files it reads and posts to its controller.
+Files dropped on the page arrive as the browser's own `drop` events (`dataTransfer.files`,
+folders through `webkitGetAsEntry`): the web view leaves drops to the page.
+
 ### Endpoints
 
 The script API sits on HTTP-style endpoints that the framework serves to the page:
@@ -73,6 +86,7 @@ The script API sits on HTTP-style endpoints that the framework serves to the pag
 | `GET /__apf/presets` | `{"presets": [...], "dir"}` as above |
 | `/__apf/preset/save?name=&overwrite=1&type=&subtype=&mood=a,b&description=&author=` | save a user preset |
 | `GET`, `POST /__apf/plugin/<path>?<query>` | the controller's `request` |
+| `GET /__apf/files/choose?folders=0\|1&multiple=0\|1&types=wav,aif&message=` | the open panel: `{"ok": true, "paths": [...]}`, or `{"ok": false, "unsupported": true}` |
 
 ## Resizing in detail
 

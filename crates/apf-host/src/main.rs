@@ -738,8 +738,9 @@ mod gui {
                         Err("cannot encode the snapshot as PNG".to_string())
                     } else {
                         let len: usize = objc2::msg_send![png, length];
-                        let bytes: *const u8 = objc2::msg_send![png, bytes];
-                        Ok(std::slice::from_raw_parts(bytes, len).to_vec())
+                        // `bytes` returns `const void *`: declared so, objc2's type check passes.
+                        let bytes: *const std::ffi::c_void = objc2::msg_send![png, bytes];
+                        Ok(std::slice::from_raw_parts(bytes as *const u8, len).to_vec())
                     }
                 }
             };

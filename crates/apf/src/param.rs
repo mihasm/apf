@@ -427,6 +427,24 @@ pub fn validate_pages(pages: &[crate::plugin::RemotePage], params: &[ParamDef]) 
     Ok(())
 }
 
+/// The order an Audio Unit lists the parameters in (`Plugin::AU_FIRST_PARAMS`): the indices
+/// into `params` of the keys in `first`, then every other parameter in `params` order.
+pub fn au_order(params: &[ParamDef], first: &[&str]) -> Result<Vec<usize>, String> {
+    let mut order = Vec::with_capacity(params.len());
+    for key in first {
+        let Some(i) = params.iter().position(|p| p.key == *key) else {
+            return Err(format!("AU_FIRST_PARAMS names '{key}', which is no parameter"));
+        };
+        if order.contains(&i) {
+            return Err(format!("AU_FIRST_PARAMS names '{key}' twice"));
+        }
+        order.push(i);
+    }
+    let rest: Vec<usize> = (0..params.len()).filter(|i| !order.contains(i)).collect();
+    order.extend(rest);
+    Ok(order)
+}
+
 /// An `f64` in an `AtomicU64`. Lock-free on every 64-bit target this framework supports.
 #[derive(Debug, Default)]
 pub struct AtomicF64(AtomicU64);
@@ -555,6 +573,14 @@ mod tests {
         assert_eq!(CUTOFF, ParamId(0));
         assert_eq!(DEFS[0].host_id(), fnv1a(b"cutoff") & 0x7fff_ffff);
         validate(DEFS).unwrap();
+    }
+
+    #[test]
+    fn au_order_puts_the_named_parameters_first() {
+        assert_eq!(au_order(DEFS, &[]).unwrap(), [0, 1, 2, 3, 4]);
+        assert_eq!(au_order(DEFS, &["voices", "gain"]).unwrap(), [3, 1, 0, 2, 4]);
+        assert!(au_order(DEFS, &["level"]).is_err());
+        assert!(au_order(DEFS, &["gain", "gain"]).is_err());
     }
 
     #[test]

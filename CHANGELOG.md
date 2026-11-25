@@ -9,6 +9,9 @@ versions.
 
 ### Added
 
+- `Plugin::AU_FIRST_PARAMS`: keys of parameters the AUv2 lists first (Logic maps its automatic
+  Smart Controls to the first parameters of the list), the rest in `PARAMS` order. Ids, state
+  and the other formats' order are unchanged; a key that is no parameter fails `init`.
 - `apf.files.choose({folders, multiple, types, message})` in the web view: the system's open
   panel (macOS), resolving to the chosen files' or folders' paths, for a controller that keeps
   a folder in place or reads files again later (`GET /__apf/files/choose`). Elsewhere it

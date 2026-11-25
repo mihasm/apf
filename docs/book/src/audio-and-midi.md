@@ -88,7 +88,8 @@ Hardware controllers with knobs reach a plugin in three ways, from the most auto
 
 - **Logic** (keyboards and other controllers with a Logic integration, encoders in "Plugin"
   mode) puts the knobs on the track's Smart Controls, which Logic maps to the first
-  parameters in `PARAMS` order. Put the important ones first.
+  parameters of the Audio Unit's list: `Plugin::AU_FIRST_PARAMS`, then `PARAMS` order. Put
+  the important ones first.
 - **CLAP hosts** that implement the remote-controls extension use the plugin's remote-control
   pages (`Plugin::REMOTE_CONTROLS`, pages of eight parameter keys; without pages, the first
   eight parameters are used). Not yet checked in such a host.

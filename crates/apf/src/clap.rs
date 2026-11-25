@@ -434,7 +434,10 @@ unsafe extern "C" fn plugin_init<P: Plugin>(plugin: *const clap_plugin) -> bool 
         let ptrs = HostPtrs::query(inst.host);
         let _ = inst.host_ptrs.set(ptrs);
         let _ = inst.shared.host.set(Box::new(ptrs));
-        if let Err(e) = param::validate(P::PARAMS).and_then(|()| param::validate_pages(P::REMOTE_CONTROLS, P::PARAMS)) {
+        if let Err(e) = param::validate(P::PARAMS)
+            .and_then(|()| param::validate_pages(P::REMOTE_CONTROLS, P::PARAMS))
+            .and_then(|()| param::au_order(P::PARAMS, P::AU_FIRST_PARAMS).map(drop))
+        {
             inst.log(CLAP_LOG_ERROR, &format!("{}: {e}", P::INFO.name));
             return false;
         }
@@ -1578,7 +1581,8 @@ unsafe extern "C" fn provider_get_extension(_p: *const clap_preset_discovery_pro
 /// clap-wrapper's `clap.plugin-auv2-param-ordering/0` (include/clapwrapper/auv2.h). Without
 /// it the AUv2 lists parameters sorted by id, which for us are hashes; Logic shows them, and
 /// keeps automation by position, in that order. With it they keep the plugin's declaration
-/// order, so new parameters must be appended to `PARAMS`, never inserted.
+/// order after `AU_FIRST_PARAMS`, so new parameters must be appended to `PARAMS`, never
+/// inserted.
 const CLAP_EXT_AUV2_PARAM_ORDERING: &CStr = c"clap.plugin-auv2-param-ordering/0";
 
 #[repr(C)]
@@ -1590,8 +1594,9 @@ unsafe extern "C" fn auv2_get_param_order<P: Plugin>(_plugin: *const clap_plugin
     if order.is_null() || count != P::PARAMS.len() {
         return false;
     }
-    for i in 0..count {
-        *order.add(i) = i;
+    let Ok(au) = guard(Err(String::new()), || param::au_order(P::PARAMS, P::AU_FIRST_PARAMS)) else { return false };
+    for (i, index) in au.into_iter().enumerate() {
+        *order.add(i) = index;
     }
     true
 }
@@ -1980,6 +1985,39 @@ mod tests {
         shared.detached.store(true, Ordering::Release);
         main.store(true, Ordering::Relaxed);
         assert!(!host.edit_param(0, 0.5));
+    }
+
+    /// Names two parameters for the top of the Audio Unit's list.
+    struct Ordered;
+
+    impl Plugin for Ordered {
+        const INFO: PluginInfo =
+            PluginInfo { id: "dev.test.ordered", name: "Ordered", vendor: "Test", url: "", version: "1", description: "", features: &[] };
+        const LAYOUT: crate::AudioLayout = crate::AudioLayout::INSTRUMENT_STEREO;
+        const PARAMS: &'static [ParamDef] = &[
+            ParamDef::float("a", "A", 0.0, 1.0, 0.5),
+            ParamDef::float("b", "B", 0.0, 1.0, 0.5),
+            ParamDef::float("c", "C", 0.0, 1.0, 0.5),
+            ParamDef::float("d", "D", 0.0, 1.0, 0.5),
+        ];
+        const AU_FIRST_PARAMS: &'static [&'static str] = &["d", "c"];
+        fn new() -> Self {
+            Ordered
+        }
+        fn process(&mut self, _: &mut crate::AudioBuffer, _: &crate::ProcessContext) -> crate::ProcessStatus {
+            crate::ProcessStatus::Continue
+        }
+    }
+
+    #[test]
+    fn the_audio_unit_lists_the_named_parameters_first() {
+        let mut order = [usize::MAX; 4];
+        // SAFETY: the function reads only `order`, `count` entries long.
+        unsafe {
+            assert!(auv2_get_param_order::<Ordered>(ptr::null(), order.as_mut_ptr(), 4));
+            assert!(!auv2_get_param_order::<Ordered>(ptr::null(), order.as_mut_ptr(), 3));
+        }
+        assert_eq!(order, [3, 2, 0, 1]);
     }
 
     /// Records where each `process` call starts and the song position it was told.

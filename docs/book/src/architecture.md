@@ -55,8 +55,8 @@ list is in [Repository and tools](repository.md).
 ## Parameters in the host's eyes
 
 A parameter's id is a hash of its string key, so a key must never change. Audio Units list
-parameters in `PARAMS` order and Logic keys its automation and Smart Controls to that order,
-so new parameters go at the end. Continuous parameters are exposed to hosts normalised
+parameters in `PARAMS` order (after the plugin's `AU_FIRST_PARAMS`) and Logic keys its
+automation and Smart Controls to that order, so new parameters go at the end. Continuous parameters are exposed to hosts normalised
 (0..1) so that automation lanes follow the parameter's curve; the text ("2.40 kHz") is
 converted by the framework in both directions. State is saved by parameter id and loads
 sessions from older and newer versions: a parameter missing from an old session gets its

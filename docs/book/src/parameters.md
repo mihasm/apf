@@ -83,7 +83,9 @@ with a [`Smoother`](dsp.md): see [example 02](02-gain.md).
 2. **Only append.** Audio Units list parameters by position, and Logic keys its automation and
    Smart Controls to that order. Add new parameters at the end of the list. Never insert in the
    middle, never delete (use `.hidden()` to retire one), and put the important ones first: they
-   are what a controller's first eight knobs reach.
+   are what a controller's first eight knobs reach. To put parameters declared later at the top
+   of the Audio Unit's list (a synth's macros), name them in `Plugin::AU_FIRST_PARAMS` before
+   release; the rest follow in `PARAMS` order.
 3. **Never change what a stored value means.** If a saved project says `gain = -6`, it must
    still mean -6 dB. If you need different behaviour, add a new parameter whose default
    reproduces the old behaviour. The demo synth added its attack, decay and sustain this way,

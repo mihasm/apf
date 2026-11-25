@@ -39,7 +39,7 @@ sample, the host gets the gesture, and the mapping survives a saved session).
 implement the remote-controls extension put a page on a hardware controller's knobs (APF's
 remote pages are not yet checked in a host that uses them). Without pages the first eight
 parameters are used. Logic's Smart Controls also take the first parameters, so keep the ones
-people want at the top of `PARAMS`.
+people want at the top of `PARAMS`, or name them in `AU_FIRST_PARAMS`.
 
 **Host automation.** A host writes parameter changes into the block with a sample position. APF
 splits the block there, so `process` reads the new value and the change lands on its exact

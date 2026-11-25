@@ -294,6 +294,13 @@ pub trait Plugin: Send + Sized + 'static {
     /// Pages of parameters for controller knobs. Empty: one page with the first eight
     /// parameters.
     const REMOTE_CONTROLS: &'static [RemotePage] = &[];
+    /// Keys of the parameters an Audio Unit lists first, in this order; the rest follow in
+    /// `PARAMS` order. Logic maps its automatic Smart Controls (and with them a controller's
+    /// knobs in Logic's plugin mode) to the first parameters of the list. Logic also keys
+    /// automation to list positions: set this before release, since changing it later moves
+    /// the automation of projects saved before. Ids, state and the other formats' order (AUv3,
+    /// CLAP, VST3) stay.
+    const AU_FIRST_PARAMS: &'static [&'static str] = &[];
     /// Factory presets: the text of `.apfpreset` files, usually `include_str!`ed from the
     /// plugin's `presets/` folder (see [`crate::preset`]). They are offered in the view's
     /// preset list and to hosts, beside the user's own presets.

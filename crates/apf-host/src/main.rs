@@ -1,7 +1,7 @@
 //! `apf-host` — a minimal CLAP host that loads a built `.clap` bundle (the real binary, as a
 //! DAW would) and checks it without any DAW:
 //!
-//!   apf-host <plugin.clap> [--render out.wav] [--gui-test] [--gui SECONDS] [--screenshot out.png] [--parent-in-window]
+//!   apf-host <plugin.clap> [--render out.wav] [--gui-test] [--gui SECONDS [--play]] [--screenshot out.png] [--parent-in-window]
 //!   apf-host <hot-shell.clap> --hot-test <publish folder>
 //!
 //! * always: scans the plugin, lists its parameters, renders two seconds of a chord and
@@ -9,7 +9,9 @@
 //! * `--gui-test`: opens the web view in a window and drives the web UI end to end (UI edit →
 //!   host automation events, host automation → UI → edit back), without anyone at the screen
 //!   (a plugin without a web view skips it);
-//! * `--gui SECONDS`: just shows the web view that long (to look at it);
+//! * `--gui SECONDS`: just shows the web view that long (to look at it); with `--play` the
+//!   plugin processes silent blocks in real time meanwhile, no notes, as a DAW's selected track
+//!   does (what the audio thread publishes to the page then moves: meters, live values);
 //! * `--screenshot out.png`: a picture of the web view's web page (WebKit's own snapshot, so it
 //!   works behind a locked screen; a window capture for web views without a webview, and on
 //!   Windows);
@@ -1601,7 +1603,7 @@ enum TestKey {
 }
 
 #[cfg(any(target_os = "macos", windows))]
-unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, test: bool, screenshot: Option<&Path>, in_window: bool) -> Result<()> {
+unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, play: bool, test: bool, screenshot: Option<&Path>, in_window: bool) -> Result<()> {
     let params = loaded.param_infos();
     if test && loaded.gui.is_none() {
         // A plugin without a web view has nothing to drive; its render check above still ran.
@@ -1744,7 +1746,11 @@ unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, test: bool, screenshot:
         }
     }
     if let Some(s) = seconds {
-        gui::linger(Duration::from_secs_f64(s));
+        if play {
+            result = result.and(play_silence(loaded, Duration::from_secs_f64(s)));
+        } else {
+            gui::linger(Duration::from_secs_f64(s));
+        }
     }
     if let Some(path) = screenshot {
         match gui::screenshot(&window, path) {
@@ -1760,8 +1766,66 @@ unsafe fn gui_run(loaded: &Loaded, seconds: Option<f64>, test: bool, screenshot:
     result
 }
 
+/// `--gui SECONDS --play`: silent blocks of 256 at 48 kHz in real time, no events, with the
+/// window's events and the plugin's main-thread callbacks between them, for `duration`.
+#[cfg(any(target_os = "macos", windows))]
+unsafe fn play_silence(loaded: &Loaded, duration: Duration) -> Result<()> {
+    let plugin = loaded.plugin;
+    let (sr, block) = (48000.0, 256usize);
+    let outs = loaded.ports(false) as usize;
+    let ins = loaded.ports(true) as usize;
+    if !((*plugin).activate.unwrap())(plugin, sr, 1, block as u32) || !((*plugin).start_processing.unwrap())(plugin) {
+        return Err("--play: activate failed".into());
+    }
+    let mut out_bufs = vec![vec![0f32; block]; outs.max(1)];
+    let mut in_bufs = vec![vec![0f32; block]; ins.max(1)];
+    let mut out_events = Vec::new();
+    let no_events: Vec<AnyEvent> = Vec::new();
+    let start = Instant::now();
+    let mut pos = 0usize;
+    let mut result = Ok(());
+    while start.elapsed() < duration {
+        // The blocks due by now, then the window and the callbacks.
+        while (pos as f64) < start.elapsed().as_secs_f64() * sr {
+            for b in in_bufs.iter_mut() {
+                b.fill(0.0);
+            }
+            let mut out_ptrs: Vec<*mut f32> = out_bufs.iter_mut().map(|b| b.as_mut_ptr()).collect();
+            let mut in_ptrs: Vec<*mut f32> = in_bufs.iter_mut().map(|b| b.as_mut_ptr()).collect();
+            let mut out_buf = clap_audio_buffer { data32: out_ptrs.as_mut_ptr(), data64: ptr::null_mut(), channel_count: outs as u32, latency: 0, constant_mask: 0 };
+            let in_buf = clap_audio_buffer { data32: in_ptrs.as_mut_ptr(), data64: ptr::null_mut(), channel_count: ins as u32, latency: 0, constant_mask: 0 };
+            let in_list = input_list(&no_events);
+            out_events.clear();
+            let out_list = output_list(&mut out_events);
+            let process = clap_process {
+                steady_time: pos as i64,
+                frames_count: block as u32,
+                transport: ptr::null(),
+                audio_inputs: if ins > 0 { &in_buf } else { ptr::null() },
+                audio_outputs: &mut out_buf,
+                audio_inputs_count: (ins > 0) as u32,
+                audio_outputs_count: 1,
+                in_events: &in_list,
+                out_events: &out_list,
+            };
+            if ((*plugin).process.unwrap())(plugin, &process) == CLAP_PROCESS_ERROR && result.is_ok() {
+                result = Err(format!("--play: process returned an error at frame {pos}"));
+            }
+            pos += block;
+        }
+        gui::pump(Duration::from_millis(2));
+        if CALLBACK_REQUESTED.swap(false, Ordering::SeqCst) {
+            ((*plugin).on_main_thread.unwrap())(plugin);
+        }
+    }
+    ((*plugin).stop_processing.unwrap())(plugin);
+    ((*plugin).deactivate.unwrap())(plugin);
+    println!("play:       {} silent blocks in {:.1} s", pos / block, start.elapsed().as_secs_f64());
+    result
+}
+
 #[cfg(not(any(target_os = "macos", windows)))]
-unsafe fn gui_run(_: &Loaded, _: Option<f64>, _: bool, _: Option<&Path>, _: bool) -> Result<()> {
+unsafe fn gui_run(_: &Loaded, _: Option<f64>, _: bool, _: bool, _: Option<&Path>, _: bool) -> Result<()> {
     Err("the GUI test is implemented for macOS and Windows only so far".into())
 }
 
@@ -1940,6 +2004,7 @@ fn run() -> Result<()> {
     let mut wav = None;
     let mut gui_seconds = None;
     let mut gui_test = false;
+    let mut play = false;
     let mut in_window = false;
     let mut screenshot = None;
     let mut hot_dir = None;
@@ -1949,6 +2014,7 @@ fn run() -> Result<()> {
             "--render" => wav = Some(PathBuf::from(args.next().ok_or("--render needs a path")?)),
             "--gui" => gui_seconds = Some(args.next().ok_or("--gui needs seconds")?.parse::<f64>().map_err(|e| e.to_string())?),
             "--gui-test" => gui_test = true,
+            "--play" => play = true,
             "--parent-in-window" => in_window = true,
             "--screenshot" => screenshot = Some(PathBuf::from(args.next().ok_or("--screenshot needs a path")?)),
             "--hot-wait" => hot_wait = Some(args.next().ok_or("--hot-wait needs seconds")?.parse::<f64>().map_err(|e| e.to_string())?),
@@ -1957,7 +2023,7 @@ fn run() -> Result<()> {
             _ => return Err(format!("unexpected argument {a}")),
         }
     }
-    let bundle = bundle.ok_or("usage: apf-host <plugin.clap> [--render out.wav] [--gui-test] [--gui SECONDS] [--screenshot out.png] [--parent-in-window]")?;
+    let bundle = bundle.ok_or("usage: apf-host <plugin.clap> [--render out.wav] [--gui-test] [--gui SECONDS [--play]] [--screenshot out.png] [--parent-in-window]")?;
     let script = std::env::temp_dir().join(format!("apf-host-gui-test-{}.js", std::process::id()));
     if gui_test {
         std::fs::write(&script, GUI_TEST_JS).map_err(|e| e.to_string())?;
@@ -1989,7 +2055,7 @@ fn run() -> Result<()> {
             return r;
         }
         let gui_result =
-            if gui_test || gui_seconds.is_some() || screenshot.is_some() { gui_run(&loaded, gui_seconds, gui_test, screenshot.as_deref(), in_window) } else { Ok(()) };
+            if gui_test || gui_seconds.is_some() || screenshot.is_some() { gui_run(&loaded, gui_seconds, play, gui_test, screenshot.as_deref(), in_window) } else { Ok(()) };
         ((*loaded.plugin).destroy.unwrap())(loaded.plugin);
         (loaded.entry.deinit.unwrap())();
         gui_result
